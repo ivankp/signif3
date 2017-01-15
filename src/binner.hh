@@ -8,6 +8,7 @@
 
 #include "axis.hh"
 #include "default_bin_filler.hh"
+#include "utility.hh"
 
 namespace ivanp {
 
@@ -27,6 +28,7 @@ class binner;
 
 template <typename Bin, typename... Ax, typename Container, typename Filler>
 class binner<Bin,std::tuple<Ax...>,Container,Filler> {
+  static_assert(sizeof...(Ax)>0,"");
 public:
   using bin_type = Bin;
   using axes_specs = std::tuple<Ax...>;
@@ -45,9 +47,7 @@ public:
   using index_array_type = std::array<size_type,naxes>;
   using index_array_cref = const index_array_type&;
 
-  static_assert(naxes>0,"");
-
-  static std::vector<std::pair<std::string,binner*>> all;
+  static std::vector<named<binner>> all;
 
 private:
   axes_tuple _axes;
@@ -113,17 +113,26 @@ public:
   binner() = default;
   ~binner() = default;
 
+  template <typename C=container_type,
+            std::enable_if_t<is_std_vector<C>::value>* = nullptr>
+  binner(typename Ax::axis... axes)
+  : _axes{std::forward<typename Ax::axis>(axes)...}, _bins(nbins_total()) { }
+  template <typename C=container_type,
+            std::enable_if_t<is_std_array<C>::value>* = nullptr>
+  binner(typename Ax::axis... axes)
+  : _axes{std::forward<typename Ax::axis>(axes)...}, _bins{} { }
+
   template <typename Name, typename C=container_type,
             std::enable_if_t<is_std_vector<C>::value>* = nullptr>
   binner(Name&& name, typename Ax::axis... axes)
   : _axes{std::forward<typename Ax::axis>(axes)...}, _bins(nbins_total()) {
-    all.emplace_back(std::forward<Name>(name),this);
+    all.emplace_back(this,std::forward<Name>(name));
   }
   template <typename Name, typename C=container_type,
             std::enable_if_t<is_std_array<C>::value>* = nullptr>
   binner(Name&& name, typename Ax::axis... axes)
   : _axes{std::forward<typename Ax::axis>(axes)...}, _bins{} {
-    all.emplace_back(std::forward<Name>(name),this);
+    all.emplace_back(this,std::forward<Name>(name));
   }
 
   binner(const binner& o): _axes(o._axes), _bins(o._bins) { }
@@ -207,7 +216,7 @@ public:
 };
 
 template <typename B, typename... A, typename C, typename F>
-std::vector<std::pair<std::string,binner<B,std::tuple<A...>,C,F>*>>
+std::vector<named<binner<B,std::tuple<A...>,C,F>>>
 binner<B,std::tuple<A...>,C,F>::all;
 
 } // end namespace ivanp

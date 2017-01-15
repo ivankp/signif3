@@ -33,7 +33,7 @@ file_type_lumi validate_file_name(const char* fname) {
 
   const char *begin = fname, *end = fname+std::strlen(fname);
   if (std::regex_search(begin,end,match,data_re)) {
-    return { false, atof(match[1].str().c_str()) };
+    return { false, std::stod(match[1]) };
   } else if (std::regex_search(begin,end,match,mc_re)) {
     return { true, 0 };
   } else throw ivanp::exception("Unexpected file name: ",fname);
@@ -60,16 +60,13 @@ template <typename T>
 using hist = hist_t<axis<T>>;
 
 template <typename T>
-std::ostream& operator<<(std::ostream& o,
-  const std::pair<std::string,hist<T>*>& nh
-) {
+std::ostream& operator<<(std::ostream& o, const ivanp::named<hist<T>>& h) {
   const auto prec = o.precision();
   const std::ios::fmtflags f( o.flags() );
-  o << "\033[32m" << nh.first << "\033[0m\n";
-  const auto& h = *nh.second;
-  const auto& a = h.axis();
+  o << "\033[32m" << h.name << "\033[0m\n";
+  const auto& a = h->axis();
   for (unsigned i=1, n=a.nbins()+2; i<n; ++i) {
-    const auto& b = h.bin(i);
+    const auto& b = h->bin(i);
     o << "\033[35m[" << a.lower(i) << ',';
     if (i==n-1) o << "∞";
     else o << a.upper(i);
@@ -313,8 +310,8 @@ int main(int argc, const char* argv[])
         b.tmp = 0;
       }
     };
-    for (const auto& h : hist<int>::all) merge_tmp(h.second->bins());
-    for (const auto& h : hist<double>::all) merge_tmp(h.second->bins());
+    for (const auto& h : hist<int>::all) merge_tmp(h->bins());
+    for (const auto& h : hist<double>::all) merge_tmp(h->bins());
 
   }
 
@@ -330,11 +327,11 @@ int main(int argc, const char* argv[])
     }
   };
   for (const auto& h : hist<int>::all) {
-    signif(h.second->bins());
+    signif(h->bins());
     cout << h << endl;
   }
   for (const auto& h : hist<double>::all) {
-    signif(h.second->bins());
+    signif(h->bins());
     cout << h << endl;
   }
 
