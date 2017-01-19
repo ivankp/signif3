@@ -12,15 +12,21 @@ template <typename... T> using void_t = typename make_void<T...>::type;
 
 template <typename New, typename Old> using replace_t = New;
 
-// boolean compositing **********************************************
+// Operations on traits *********************************************
 
-template <bool...> struct bool_sequence {};
+template<class...> struct conjunction: std::true_type { };
+template<class B1> struct conjunction<B1>
+: std::integral_constant<bool,bool(B1::value)> { };
+template<class B1, class... Bn> struct conjunction<B1, Bn...> 
+: std::conditional_t<bool(B1::value),
+  conjunction<Bn...>, conjunction<B1> > {};
 
-template <bool... B>
-using mp_and = std::is_same< bool_sequence< B... >,
-                             bool_sequence< ( B || true )... > >;
-template <bool... B>
-using mp_or = std::integral_constant< bool, !mp_and< !B... >::value >;
+template<class...> struct disjunction: std::false_type { };
+template<class B1> struct disjunction<B1>
+: std::integral_constant<bool,bool(B1::value)> { };
+template<class B1, class... Bn> struct disjunction<B1, Bn...> 
+: std::conditional_t<bool(B1::value),
+  disjunction<B1>, disjunction<Bn...>>  { };
 
 // ******************************************************************
 
@@ -68,6 +74,26 @@ struct is_std_vector<std::vector<T,Alloc>>: std::true_type { };
 template <typename> struct is_integer_sequence: std::false_type { };
 template <typename T, T... Ints>
 struct is_integer_sequence<std::integer_sequence<T,Ints...>>: std::true_type { };
+#endif
+
+// Tuple of same types **********************************************
+
+#ifdef _GLIBCXX_TUPLE
+namespace detail {
+template <typename T, typename S> struct tuple_of_same_impl { };
+template <typename T, size_t... I>
+struct tuple_of_same_impl<T,std::index_sequence<I...>> {
+  template <typename U, size_t J> using identity = U;
+  using type = std::tuple<identity<T,I>...>;
+};
+}
+
+template <typename T, size_t N>
+struct tuple_of_same
+: detail::tuple_of_same_impl<T,std::make_index_sequence<N>> { };
+
+template <typename T, size_t N>
+using tuple_of_same_t = typename tuple_of_same<T,N>::type;
 #endif
 
 // Expression traits ************************************************

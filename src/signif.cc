@@ -13,6 +13,7 @@
 #include <TKey.h>
 
 #include "binner.hh"
+#include "re_axes.hh"
 #include "catstr.hh"
 #include "timed_counter.hh"
 #include "array_ops.hh"
@@ -51,16 +52,19 @@ struct hist_bin {
 };
 double hist_bin::weight;
 
-template <typename T>
-using axis = ivanp::container_axis<std::vector<T>>;
 template <typename... Axes>
-using hist_t = ivanp::binner<hist_bin,
+using hist = ivanp::binner<hist_bin,
   std::tuple<ivanp::axis_spec<Axes>...>>;
-template <typename T>
-using hist = hist_t<axis<T>>;
 
-template <typename T>
-std::ostream& operator<<(std::ostream& o, const ivanp::named<hist<T>>& h) {
+using re_axis = typename re_axes::axis_type;
+template <size_t N>
+using re_hist = ivanp::binner<hist_bin,
+  ivanp::tuple_of_same_t<ivanp::axis_spec<re_axis>,N>>;
+
+template <typename... Axes>
+std::ostream& operator<<(std::ostream& o,
+  const ivanp::named_ptr<hist<Axes...>>& h
+) {
   const auto prec = o.precision();
   const std::ios::fmtflags f( o.flags() );
   o << "\033[32m" << h.name << "\033[0m\n";
@@ -90,50 +94,31 @@ int main(int argc, const char* argv[])
   const double fw = len(mass_window)/(len(mass_range)-len(mass_window));
   double lumi = 0.;
 
-  hist<int>
+  re_axes ra("hgam.bins");
+// #define a_(name) auto a_##name = ra[#name];
+#define h_(name) re_hist<1> h_##name(#name,ra[#name]);
+
+  hist<ivanp::index_axis<>>
     h_total("total",{0,1}),
-    h_N_j_excl("N_j_excl",{0,1,2,3,4}),
-    h_N_j_incl("N_j_incl",{0,1,2,3,4}),
-    h_VBF("VBF",{0,1,2,3});
+    h_N_j_excl("N_j_excl",{0,4}),
+    h_N_j_incl("N_j_incl",{0,4}),
+    h_VBF("VBF",{0,3});
 
-  hist<double>
-    h_pT_yy("pT_yy",{0.,10.,15.,20.,30.,45.,60.,80.,100.,120.,155.,200.,260.,400.}),
-    h_yAbs_yy("yAbs_yy",{0.,0.15,0.3,0.45,0.6,0.75,0.9,1.2,1.6,2.4}),
-    h_cosTS_yy("cosTS_yy",{0.,0.0625,0.125,0.1875,0.25,0.3125,0.375,0.4375,0.5,0.625,0.75,1.}),
-    h_pTt_yy("pTt_yy",{0.,4.,8.,12.,16.,22.,28.,34.,42.,50.,60.,70.,85.,100.,125.,200.}),
-    h_Dy_y_y("Dy_y_y",{0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.,1.2,1.4,2.}),
+  h_(pT_yy) h_(yAbs_yy) h_(cosTS_yy) h_(pTt_yy) h_(Dy_y_y)
+  h_(HT)
+  h_(pT_j1) h_(pT_j2) h_(pT_j3)
+  h_(yAbs_j1) h_(yAbs_j2)
+  h_(Dphi_j_j) h_(Dphi_j_j_signed)
+  h_(Dy_j_j) h_(m_jj)
+  h_(pT_yyjj) h_(Dphi_yy_jj)
+  h_(sumTau_yyj) h_(maxTau_yyj)
+  h_(pT_yy_0j) h_(pT_yy_1j) h_(pT_yy_2j) h_(pT_yy_3j)
+  h_(pT_j1_excl)
 
-    h_HT("HT",{30.,35.,45.,60.,75.,100.,140.,200.,500.}),
-
-    h_pT_j1("pT_j1",{30.,40.,55.,75.,95.,120.,170.,400.}),
-    h_pT_j2("pT_j2",{30.,40.,55.,95.}),
-    h_pT_j3("pT_j3",{30.,95.}),
-
-    h_yAbs_j1("yAbs_j1",{0.5,1.,1.5,2.,2.5,3.,4.}),
-    h_yAbs_j2("yAbs_j2",{0.,1.5,2.5,4.}),
-
-    h_Dphi_j_j("Dphi_j_j",{0., 1.0472, 2.0944, 3.14159}),
-    h_Dphi_j_j_signed("Dphi_j_j_signed",{-M_PI,-M_PI_2,0.,M_PI_2,M_PI}),
-    h_Dy_j_j("Dy_j_j",{0., 2., 4., 6., 8.8}),
-    h_m_jj("m_jj",{0.,200.,5e2,1e3}),
-
-    h_pT_yyjj("pT_yyjj",{0.,20.,40.,150.}),
-    h_Dphi_yy_jj("Dphi_yy_jj",{0.,0.05,0.13,0.3,M_PI}),
-
-    h_sumTau_yyj("sumTau_yyj",{0.,2.,4.,8.,12.,17.,25.,40.,80.,150.}),
-    h_maxTau_yyj("maxTau_yyj",{0.,1e-3,8.,12.,17.,25.,40.,80.,150.}),
-
-    h_pT_yy_0j("pT_yy_0j",{0.,10.,20.,30.,60.,200.,400.}),
-    h_pT_yy_1j("pT_yy_1j",{0.,30.,45.,60.,80.,120.,200.,400.}),
-    h_pT_yy_2j("pT_yy_2j",{0.,80.,120.,200.,400.}),
-    h_pT_yy_3j("pT_yy_3j",{0.,120.,200.,400.}),
-
-    h_pT_j1_excl("pT_j1_excl",{30.,40.,55.,75.,120.,400.});
-
-    // h_Dphi_Dy_jj("Dphi_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
-    // h_Dphi_pi4_Dy_jj("Dphi_pi4_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
-    // h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
-    // h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
+  // h_Dphi_Dy_jj("Dphi_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
+  // h_Dphi_pi4_Dy_jj("Dphi_pi4_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
+  // h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
+  // h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
 
   for (int f=1; f<argc; ++f) {
     const auto file_props = validate_file_name(argv[f]);
@@ -174,31 +159,22 @@ int main(int argc, const char* argv[])
     }
     TTreeReaderValue<Char_t>  _isPassed (reader,"HGamEventInfoAuxDyn.isPassed");
 
-    TTreeReaderValue<Float_t> _m_yy    (reader,"HGamEventInfoAuxDyn.m_yy");
-    TTreeReaderValue<Float_t> _pT_yy   (reader,"HGamEventInfoAuxDyn.pT_yy");
-    TTreeReaderValue<Float_t> _yAbs_yy (reader,"HGamEventInfoAuxDyn.yAbs_yy");
-    TTreeReaderValue<Float_t> _cosTS_yy(reader,"HGamEventInfoAuxDyn.cosTS_yy");
-    TTreeReaderValue<Float_t> _pTt_yy  (reader,"HGamEventInfoAuxDyn.pTt_yy");
-    TTreeReaderValue<Float_t> _Dy_y_y  (reader,"HGamEventInfoAuxDyn.Dy_y_y");
+#define VAR_STR_(NAME, STR) \
+  TTreeReaderValue<Float_t> _##NAME(reader,"HGamEventInfoAuxDyn." STR);
+#define VAR_(NAME) VAR_STR_(NAME, #NAME)
+#define VAR30_(NAME) VAR_STR_(NAME, #NAME "_30")
 
-    TTreeReaderValue<Float_t> _HT(reader,"HGamEventInfoAuxDyn.HT_30");
+    VAR_(m_yy) VAR_(pT_yy) VAR_(yAbs_yy) VAR_(cosTS_yy) VAR_(pTt_yy)
+    VAR_(Dy_y_y)
 
-    TTreeReaderValue<Int_t>   _N_j  (reader,"HGamEventInfoAuxDyn.N_j_30");
-    TTreeReaderValue<Float_t> _pT_j1(reader,"HGamEventInfoAuxDyn.pT_j1_30");
-    TTreeReaderValue<Float_t> _pT_j2(reader,"HGamEventInfoAuxDyn.pT_j2_30");
-    TTreeReaderValue<Float_t> _pT_j3(reader,"HGamEventInfoAuxDyn.pT_j3_30");
-    TTreeReaderValue<Float_t> _yAbs_j1(reader,"HGamEventInfoAuxDyn.yAbs_j1_30");
-    TTreeReaderValue<Float_t> _yAbs_j2(reader,"HGamEventInfoAuxDyn.yAbs_j2_30");
-    TTreeReaderValue<Float_t> _Dphi_j_j(reader,"HGamEventInfoAuxDyn.Dphi_j_j_30");
-    TTreeReaderValue<Float_t> _Dphi_j_j_signed(reader,"HGamEventInfoAuxDyn.Dphi_j_j_30_signed");
-    TTreeReaderValue<Float_t> _Dy_j_j(reader,"HGamEventInfoAuxDyn.Dy_j_j_30");
-    TTreeReaderValue<Float_t> _m_jj  (reader,"HGamEventInfoAuxDyn.m_jj_30");
-
-    TTreeReaderValue<Float_t> _sumTau_yyj(reader,"HGamEventInfoAuxDyn.sumTau_yyj_30");
-    TTreeReaderValue<Float_t> _maxTau_yyj(reader,"HGamEventInfoAuxDyn.maxTau_yyj_30");
-
-    TTreeReaderValue<Float_t> _pT_yyjj(reader,"HGamEventInfoAuxDyn.pT_yyjj_30");
-    TTreeReaderValue<Float_t> _Dphi_yy_jj(reader,"HGamEventInfoAuxDyn.Dphi_yy_jj_30");
+    VAR30_(HT)
+    VAR30_(N_j)
+    VAR30_(pT_j1)      VAR30_(pT_j2)      VAR30_(pT_j3)
+    VAR30_(yAbs_j1)    VAR30_(yAbs_j2)
+    VAR30_(Dphi_j_j)   VAR_STR_(Dphi_j_j_signed,"Dphi_j_j_30_signed")
+    VAR30_(Dy_j_j)     VAR30_(m_jj)
+    VAR30_(sumTau_yyj) VAR30_(maxTau_yyj)
+    VAR30_(pT_yyjj)    VAR30_(Dphi_yy_jj)
 
     using tc = ivanp::timed_counter<Long64_t>;
     for (tc ent(reader.GetEntries(true)); reader.Next(); ++ent) {
@@ -224,7 +200,7 @@ int main(int argc, const char* argv[])
       const auto cosTS_yy = std::abs(*_cosTS_yy);
       const auto Dy_y_y = std::abs(*_Dy_y_y);
 
-      h_total(0);
+      h_total(0u);
 
       h_pT_yy   ( pT_yy );
       h_yAbs_yy ( yAbs_yy );
@@ -235,7 +211,7 @@ int main(int argc, const char* argv[])
       // h_cosTS_pT_yy( cosTS_yy, pT_yy );
 
       h_N_j_excl( nj );
-      h_N_j_incl( 0 );
+      h_N_j_incl( 0u );
 
       h_HT( *_HT/1e3 );
 
@@ -243,7 +219,7 @@ int main(int argc, const char* argv[])
 
       if (nj < 1) continue; // 1 jet -------------------------------
 
-      h_N_j_incl( 1 );
+      h_N_j_incl( 1u );
       
       const auto pT_j1 = *_pT_j1/1e3;
       h_pT_j1( pT_j1 );
@@ -262,7 +238,7 @@ int main(int argc, const char* argv[])
 
       if (nj < 2) continue; // 2 jets ------------------------------
 
-      h_N_j_incl( 2 );
+      h_N_j_incl( 2u );
 
       const auto dphi_jj = std::abs(*_Dphi_j_j);
       const auto   dy_jj = std::abs(*_Dy_j_j);
@@ -285,17 +261,17 @@ int main(int argc, const char* argv[])
       const double pT_j3 = ( nj > 2 ? *_pT_j3/1e3 : 0. );
 
       if ( (m_jj > 600.) && (dy_jj > 4.0) ) {
-        if (pT_j3 < 30.) h_VBF(0);
-        if (pT_j3 < 25.) h_VBF(1);
+        if (pT_j3 < 30.) h_VBF(0u);
+        if (pT_j3 < 25.) h_VBF(1u);
       }
       if ( (m_jj > 400.) && (dy_jj > 2.8) ) {
-        if (pT_j3 < 30.) h_VBF(2);
+        if (pT_j3 < 30.) h_VBF(2u);
       }
       // ------------------------------------------------------------
 
       if (nj < 3) continue; // 3 jets ------------------------------
 
-      h_N_j_incl( 3 );
+      h_N_j_incl( 3u );
 
       h_pT_yy_3j( pT_yy );
       h_pT_j3( pT_j3 );
@@ -310,8 +286,8 @@ int main(int argc, const char* argv[])
         b.tmp = 0;
       }
     };
-    for (const auto& h : hist<int>::all) merge_tmp(h->bins());
-    for (const auto& h : hist<double>::all) merge_tmp(h->bins());
+    for (const auto& h : hist<ivanp::index_axis<>>::all) merge_tmp(h->bins());
+    for (const auto& h : re_hist<1>::all) merge_tmp(h->bins());
 
   }
 
@@ -326,11 +302,11 @@ int main(int argc, const char* argv[])
       b.purity = b.sig/sb;
     }
   };
-  for (const auto& h : hist<int>::all) {
+  for (const auto& h : hist<ivanp::index_axis<>>::all) {
     signif(h->bins());
     cout << h << endl;
   }
-  for (const auto& h : hist<double>::all) {
+  for (const auto& h : re_hist<1>::all) {
     signif(h->bins());
     cout << h << endl;
   }
