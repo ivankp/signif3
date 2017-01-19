@@ -186,6 +186,10 @@ public:
     _bins = std::move(o._bins);
     return *this;
   }
+  binner(const std::string& name, const binner& o)
+  : _axes(o._axes), _bins(o._bins) {
+    all.emplace_back(this,name);
+  }
 
   template <unsigned I=0>
   constexpr const auto& axis() const noexcept {
