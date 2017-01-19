@@ -25,6 +25,7 @@
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::experimental::optional;
 
 bool is_mc, is_fiducial; // global variables
 double n_all_inv, fw, lumi;
@@ -72,6 +73,7 @@ struct hist_bin {
   void compute_signif() noexcept {
     bkg *= fw;
     sig *= lumi;
+    sig_truth *= lumi;
     const double sb = sig + bkg;
     signif = sig/std::sqrt(sb);
     sb_purity = sig/sb;
@@ -125,7 +127,7 @@ struct var {
 template <typename T>
 struct var<TTreeReaderValue<T>> {
   TTreeReaderValue<T> det;
-  std::experimental::optional<TTreeReaderValue<T>> truth;
+  optional<TTreeReaderValue<T>> truth;
   var(TTreeReader& tr, const std::string& name)
   : det(tr,("HGamEventInfoAuxDyn."+name).c_str())
   {
@@ -228,13 +230,14 @@ int main(int argc, const char* argv[])
     }
 
     TTreeReader reader("CollectionTree",file.get());
-    std::experimental::optional<TTreeReaderValue<Float_t>> _cs_br_fe, _weight;
+    optional<TTreeReaderValue<Float_t>> _cs_br_fe, _weight;
+    optional<TTreeReaderValue<Char_t>> _isFiducial;
     if (is_mc) {
       _cs_br_fe.emplace(reader,"HGamEventInfoAuxDyn.crossSectionBRfilterEff");
-      _weight .emplace(reader,"HGamEventInfoAuxDyn.weight");
+      _weight.emplace(reader,"HGamEventInfoAuxDyn.weight");
+      _isFiducial.emplace(reader,"HGamTruthEventInfoAuxDyn.isFiducial");
     }
     TTreeReaderValue<Char_t> _isPassed(reader,"HGamEventInfoAuxDyn.isPassed");
-    TTreeReaderValue<Char_t> _isFiducial(reader,"HGamTruthEventInfoAuxDyn.isFiducial");
 
 #define VAR_GEN_(NAME, TYPE, STR) \
   var<TTreeReaderValue<TYPE>> _##NAME(reader, STR);
@@ -268,7 +271,7 @@ int main(int argc, const char* argv[])
         if (in(m_yy.det,mass_window)) continue;
       }
 
-      is_fiducial = *_isFiducial;
+      is_fiducial = (is_mc ? **_isFiducial : false);
 
       // FILL HISTOGRAMS =====================================================
 
