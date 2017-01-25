@@ -111,16 +111,16 @@ Macro [`h_`][L169] is used for histogram definitions.
 struct [`hist_bin`][L33] defines the contents for every bin.
 [`operator++`][L47] and [`operator()`][L51] are called when the bin is filled.
 
-[L33]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L33
-[L47]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L47
-[L51]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L51
-[L86]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L86
-[L89]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L89
-[L91]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L91
-[L121]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L121
-[L128]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L128
-[L150]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L150
-[L161]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L161
-[L169]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L169
-[L193]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L193
-[L243]: https://github.com/ivankp/signif3/blob/3adbe10abc6832257898a604bf098f47dfcea098/src/signif.cc#L243
+[L33]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L33
+[L47]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L47
+[L51]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L51
+[L86]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L86
+[L89]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L89
+[L91]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L91
+[L121]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L121
+[L128]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L128
+[L150]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L150
+[L161]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L161
+[L169]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L169
+[L193]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L193
+[L243]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L243
