@@ -28,7 +28,21 @@ using std::endl;
 using std::experimental::optional;
 
 bool is_mc, is_fiducial; // global variables
-double n_all_inv, fw, lumi;
+double n_all_inv, factor, lumi = 0.;
+
+class mxaod {
+  TFile *ptr;
+  bool _is_mc;
+public:
+  mxaod(const char* fname, bool _is_mc)
+  : ptr(new TFile(fname,"read")), _is_mc(_is_mc) {
+    if (ptr->IsZombie()) throw ivanp::exception("cannot open file ",fname);
+  }
+  ~mxaod() { delete ptr; }
+  inline TFile* operator->() const noexcept { return ptr; }
+  inline TFile* operator* () const noexcept { return ptr; }
+  inline bool is_mc() const noexcept { return _is_mc; }
+};
 
 struct hist_bin {
   static double weight;
@@ -71,14 +85,14 @@ struct hist_bin {
     tmp = 0;
   }
   void compute() noexcept {
-    bkg *= fw;
+    bkg *= factor;
     sig *= lumi;
     sig_truth *= lumi;
     const double sb = sig + bkg;
     signif = sig/std::sqrt(sb);
     sb_purity = sig/sb;
     tr_purity = sig_truth/sig;
-  };
+  }
 };
 double hist_bin::weight;
 
@@ -158,11 +172,10 @@ void fill(hist<Axes...>& h, const var<T>& x) {
 double d1e3(double x) { return x*1e-3; }
 double _abs(double x) { return std::abs(x); }
 
-int main(int argc, const char* argv[])
-{
+int main(int argc, const char* argv[]) {
   const std::array<double,2> mass_range{105e3,160e3}, mass_window{121e3,129e3};
-  fw = len(mass_window)/(len(mass_range)-len(mass_window));
-  lumi = 0.;
+  factor = len(mass_window)/(len(mass_range)-len(mass_window));
+  double lumi_in = 0.;
 
   re_axes ra("hgam.bins");
   // Histogram definitions ==========================================
@@ -190,31 +203,45 @@ int main(int argc, const char* argv[])
   // h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
   // h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
 
-  for (int f=1; f<argc; ++f) { // loop over input files
-    { // validate and parse names of input files
-      static const std::regex data_re(".*/data.*_(\\d*)ipb.*\\.root$");
-      static const std::regex mc_re(".*/mc.*\\.root$");
-      std::cmatch match;
+  std::vector<mxaod> mxaods;
+  mxaods.reserve(argc-1);
+  for (int a=1; a<argc; ++a) { // loop over arguments
+    // validate args and parse names of input files
+    static const std::regex data_re(
+      "^(.*/)?data.*_(\\d*)ipb.*\\.root$", std::regex::optimize);
+    static const std::regex mc_re(
+      "^(.*/)?mc.*\\.root$", std::regex::optimize);
+    static const std::regex lumi_re(
+      "([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?) *i([pf])b$",
+      std::regex::optimize);
+    std::cmatch match;
 
-      const char *fname = argv[f], *end = fname+std::strlen(fname);
-      if (std::regex_search(fname,end,match,data_re)) {
-        is_mc = false;
-        hist_bin::weight = 1;
-        const auto flumi = std::stod(match[1]);
-        lumi += flumi;
-        cout << "\033[36mData\033[0m: " << fname << endl;
-        cout << "\033[36mLumi\033[0m: " << flumi << " ipb" << endl;
-      } else if (std::regex_search(fname,end,match,mc_re)) {
-        is_mc = true;
-        cout << "\033[36mMC\033[0m: " << fname << endl;
-      } else throw ivanp::exception("Unexpected file name: ",fname);
-    }
+    const char *arg = argv[a], *end = arg+std::strlen(arg);
+    if (std::regex_search(arg,end,match,data_re)) { // Data
+      const double flumi = std::stod(match[2]);
+      lumi_in += flumi;
+      cout << "\033[36mData\033[0m: " << arg << endl;
+      cout << "\033[36mLumi\033[0m: " << flumi << " ipb" << endl;
+      mxaods.emplace_back(arg,false);
+    } else if (std::regex_search(arg,end,match,mc_re)) { // MC
+      cout << "\033[36mMC\033[0m: " << arg << endl;
+      mxaods.emplace_back(arg,true);
+    } else if (std::regex_search(arg,end,match,lumi_re)) {
+      lumi = std::stod(match[1]);
+      if (match[3].str()[0]=='f') lumi *= 1e3; // femto to pico
+    } else throw ivanp::exception("unrecognized argument: ",arg);
+  }
+  cout << "\n\033[36mTotal lumi\033[0m: " << lumi_in << " ipb" << endl;
+  if (lumi!=0.) factor *= (lumi / lumi_in);
+  else lumi = lumi_in;
+  cout << "Scaling to " << lumi << " ipb" << endl << endl;
+  
+  for (auto& file : mxaods) { // loop over MxAODs
+    is_mc = file.is_mc();
+    cout << "\033[32m" << (is_mc ? "MC" : "Data") << "\033[0m: "
+         << file->GetName() << endl;
 
-    // open MxAOD root file =========================================
-    auto file = std::make_unique<TFile>(argv[f],"read");
-    if (file->IsZombie()) return 1;
-
-    if (is_mc) {
+    if (is_mc) { // MC
       TIter next(file->GetListOfKeys());
       TKey *key;
       while ((key = static_cast<TKey*>(next()))) {
@@ -228,10 +255,13 @@ int main(int argc, const char* argv[])
         n_all_inv = 1./n_all_inv;
         break;
       }
-    } else n_all_inv = 1;
+    } else { // Data
+      hist_bin::weight = 1;
+      n_all_inv = 1;
+    }
 
     // read variables ===============================================
-    TTreeReader reader("CollectionTree",file.get());
+    TTreeReader reader("CollectionTree",*file);
     optional<TTreeReaderValue<Float_t>> _cs_br_fe, _weight;
     optional<TTreeReaderValue<Char_t>> _isFiducial;
     if (is_mc) {
@@ -366,12 +396,11 @@ int main(int argc, const char* argv[])
     for (const auto& h : re_hist<1>::all)
       for (auto& b : h->bins()) b.merge();
 
+    file->Close();
   }
 
   h_N_j_incl = h_N_j_excl;
   h_N_j_incl.integrate_left();
-
-  cout << "\n\033[36mTotal lumi\033[0m: " << lumi <<" ipb\n"<< endl;
 
   for (const auto& h : hist<ivanp::index_axis<Int_t>>::all) {
     for (auto& b : h->bins()) b.compute();
