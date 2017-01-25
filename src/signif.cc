@@ -66,11 +66,11 @@ struct hist_bin {
       sig_truth += tmp_truth*n_all_inv;
       tmp_truth = 0;
     } else {
-      bkg += tmp*n_all_inv;
+      bkg += tmp;
     }
     tmp = 0;
   }
-  void compute_signif() noexcept {
+  void compute() noexcept {
     bkg *= fw;
     sig *= lumi;
     sig_truth *= lumi;
@@ -165,7 +165,7 @@ int main(int argc, const char* argv[])
   lumi = 0.;
 
   re_axes ra("hgam.bins");
-// #define a_(name) auto a_##name = ra[#name];
+  // Histogram definitions ==========================================
 #define h_(name) re_hist<1> h_##name(#name,ra[#name]);
 
   hist<ivanp::index_axis<Int_t>>
@@ -190,8 +190,9 @@ int main(int argc, const char* argv[])
   // h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
   // h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
 
-  for (int f=1; f<argc; ++f) {
-    { static const std::regex data_re(".*/data.*_(\\d*)ipb.*\\.root$");
+  for (int f=1; f<argc; ++f) { // loop over input files
+    { // validate and parse names of input files
+      static const std::regex data_re(".*/data.*_(\\d*)ipb.*\\.root$");
       static const std::regex mc_re(".*/mc.*\\.root$");
       std::cmatch match;
 
@@ -209,10 +210,10 @@ int main(int argc, const char* argv[])
       } else throw ivanp::exception("Unexpected file name: ",fname);
     }
 
+    // open MxAOD root file =========================================
     auto file = std::make_unique<TFile>(argv[f],"read");
     if (file->IsZombie()) return 1;
 
-    n_all_inv = 1;
     if (is_mc) {
       TIter next(file->GetListOfKeys());
       TKey *key;
@@ -227,8 +228,9 @@ int main(int argc, const char* argv[])
         n_all_inv = 1./n_all_inv;
         break;
       }
-    }
+    } else n_all_inv = 1;
 
+    // read variables ===============================================
     TTreeReader reader("CollectionTree",file.get());
     optional<TTreeReaderValue<Float_t>> _cs_br_fe, _weight;
     optional<TTreeReaderValue<Char_t>> _isFiducial;
@@ -257,6 +259,7 @@ int main(int argc, const char* argv[])
     VAR30_(sumTau_yyj) VAR30_(maxTau_yyj)
     VAR30_(pT_yyjj)    VAR30_(Dphi_yy_jj)
 
+    // loop over events =============================================
     using tc = ivanp::timed_counter<Long64_t>;
     for (tc ent(reader.GetEntries(true)); reader.Next(); ++ent) {
       if (!*_isPassed) continue;
@@ -273,7 +276,7 @@ int main(int argc, const char* argv[])
 
       is_fiducial = (is_mc ? **_isFiducial : false);
 
-      // FILL HISTOGRAMS =====================================================
+      // FILL HISTOGRAMS ============================================
 
       const auto nj = *_N_j;
 
@@ -298,7 +301,7 @@ int main(int argc, const char* argv[])
 
       if (nj == 0) fill(h_pT_yy_0j, pT_yy);
 
-      if (nj < 1) continue; // 1 jet -------------------------------
+      if (nj < 1) continue; // 1 jet --------------------------------
 
       const auto pT_j1 = _pT_j1(d1e3);
 
@@ -316,7 +319,7 @@ int main(int argc, const char* argv[])
 
       // h_pT_yy_pT_j1( pT_yy, pT_j1 );
 
-      if (nj < 2) continue; // 2 jets ------------------------------
+      if (nj < 2) continue; // 2 jets -------------------------------
 
       const auto dphi_jj = _Dphi_j_j(_abs);
       const auto   dy_jj = _Dy_j_j(_abs);
@@ -349,7 +352,7 @@ int main(int argc, const char* argv[])
       }
       // ------------------------------------------------------------
 
-      if (nj < 3) continue; // 3 jets ------------------------------
+      if (nj < 3) continue; // 3 jets -------------------------------
 
       fill(h_pT_yy_3j, pT_yy);
       fill(h_pT_j3, pT_j3);
@@ -371,11 +374,11 @@ int main(int argc, const char* argv[])
   cout << "\n\033[36mTotal lumi\033[0m: " << lumi <<" ipb\n"<< endl;
 
   for (const auto& h : hist<ivanp::index_axis<Int_t>>::all) {
-    for (auto& b : h->bins()) b.compute_signif();
+    for (auto& b : h->bins()) b.compute();
     cout << h << endl;
   }
   for (const auto& h : re_hist<1>::all) {
-    for (auto& b : h->bins()) b.compute_signif();
+    for (auto& b : h->bins()) b.compute();
     cout << h << endl;
   }
 

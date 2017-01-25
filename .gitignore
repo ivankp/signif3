@@ -3,7 +3,7 @@
 /.build
 
 # Computation output
-/out
+/out*
 /*.root
 /*.pdf
 /*.out
