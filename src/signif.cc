@@ -161,12 +161,22 @@ struct var<TTreeReaderValue<T>> {
 };
 
 template <typename T, typename... Axes>
-void fill(hist<Axes...>& h, const var<T>& x) {
+void fill(hist<Axes...>& h, const var<T>& x, bool match=true) {
+  const auto bin_det = h.find_bin(x.det);
   if (is_mc) {
-    const auto bin_det = h.find_bin(x.det);
     const auto bin_truth = h.find_bin(x.truth);
-    h.fill_bin(bin_det, is_fiducial && (bin_det == bin_truth));
-  } else h(x.det);
+    h.fill_bin(bin_det, is_fiducial && (bin_det == bin_truth) && match);
+  } else h.fill_bin(bin_det);
+}
+
+template <typename T, typename... Axes>
+void fill_incl(hist<Axes...>& h, const var<T>& x) {
+  const auto bin_det = h.find_bin(x.det);
+  if (is_mc) {
+    const auto bin_truth = h.find_bin(x.truth);
+    for (unsigned i=bin_det; i!=0; --i)
+      h.fill_bin(i, is_fiducial && (bin_truth >= i));
+  } else for (unsigned i=bin_det; i!=0; --i) h.fill_bin(i);
 }
 
 double d1e3(double x) { return x*1e-3; }
@@ -235,10 +245,10 @@ int main(int argc, const char* argv[]) {
   if (lumi!=0.) factor *= (lumi / lumi_in);
   else lumi = lumi_in;
   cout << "Scaling to " << lumi << " ipb" << endl << endl;
-  
+
   for (auto& file : mxaods) { // loop over MxAODs
     is_mc = file.is_mc();
-    cout << "\033[32m" << (is_mc ? "MC" : "Data") << "\033[0m: "
+    cout << "\033[36m" << (is_mc ? "MC" : "Data") << "\033[0m: "
          << file->GetName() << endl;
 
     if (is_mc) { // MC
@@ -309,6 +319,7 @@ int main(int argc, const char* argv[]) {
       // FILL HISTOGRAMS ============================================
 
       const auto nj = *_N_j;
+      bool match_truth_nj;
 
       const auto pT_yy = _pT_yy(d1e3);
       const auto yAbs_yy = *_yAbs_yy;
@@ -326,48 +337,58 @@ int main(int argc, const char* argv[]) {
       // h_cosTS_pT_yy( cosTS_yy, pT_yy );
 
       fill(h_N_j_excl, nj);
+      fill_incl(h_N_j_incl, nj);
 
       fill(h_HT, _HT(d1e3));
 
-      if (nj == 0) fill(h_pT_yy_0j, pT_yy);
+      if (nj == 0) fill(h_pT_yy_0j, pT_yy, nj.truth==0);
 
       if (nj < 1) continue; // 1 jet --------------------------------
 
+      match_truth_nj = nj.truth>=1;
+
       const auto pT_j1 = _pT_j1(d1e3);
 
-      fill(h_pT_j1, pT_j1);
+      fill(h_pT_j1, pT_j1, match_truth_nj);
 
-      fill(h_yAbs_j1, *_yAbs_j1);
+      fill(h_yAbs_j1, *_yAbs_j1, match_truth_nj);
 
-      fill(h_sumTau_yyj, _sumTau_yyj(d1e3));
-      fill(h_maxTau_yyj, _maxTau_yyj(d1e3));
+      fill(h_sumTau_yyj, _sumTau_yyj(d1e3), match_truth_nj);
+      fill(h_maxTau_yyj, _maxTau_yyj(d1e3), match_truth_nj);
 
       if (nj == 1) {
-        fill(h_pT_j1_excl, pT_j1);
-        fill(h_pT_yy_1j, pT_yy);
+        match_truth_nj = nj.truth==1;
+        fill(h_pT_j1_excl, pT_j1, match_truth_nj);
+        fill(h_pT_yy_1j, pT_yy, match_truth_nj);
       }
 
       // h_pT_yy_pT_j1( pT_yy, pT_j1 );
 
       if (nj < 2) continue; // 2 jets -------------------------------
 
+      match_truth_nj = nj.truth>=2;
+
       const auto dphi_jj = _Dphi_j_j(_abs);
       const auto   dy_jj = _Dy_j_j(_abs);
       const auto    m_jj = _m_jj(d1e3);
 
-      fill(h_pT_j2, _pT_j2(d1e3));
-      fill(h_yAbs_j2, *_yAbs_j2);
+      fill(h_pT_j2, _pT_j2(d1e3), match_truth_nj);
+      fill(h_yAbs_j2, *_yAbs_j2, match_truth_nj);
 
-      fill(h_Dphi_yy_jj, _Dphi_yy_jj([](auto x){ return M_PI - std::abs(x);}));
+      fill(h_Dphi_yy_jj, _Dphi_yy_jj([](auto x){ return M_PI - std::abs(x);}),
+        match_truth_nj);
 
-      fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed);
-      fill(h_Dphi_j_j, dphi_jj);
-      fill(h_Dy_j_j, dy_jj);
-      fill(h_m_jj, m_jj);
+      fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed, match_truth_nj);
+      fill(h_Dphi_j_j, dphi_jj, match_truth_nj);
+      fill(h_Dy_j_j, dy_jj, match_truth_nj);
+      fill(h_m_jj, m_jj, match_truth_nj);
 
-      fill(h_pT_yyjj, _pT_yyjj(d1e3));
+      fill(h_pT_yyjj, _pT_yyjj(d1e3), match_truth_nj);
 
-      if (nj == 2) fill(h_pT_yy_2j, pT_yy);
+      // h_Dphi_Dy_jj( dphi_jj, dy_jj );
+      // h_Dphi_pi4_Dy_jj( phi_pi4(dphi_jj), dy_jj );
+
+      if (nj == 2) fill(h_pT_yy_2j, pT_yy, nj.truth==2);
 
       // VBF --------------------------------------------------------
       var<double> pT_j3{0.,0.};
@@ -384,11 +405,10 @@ int main(int argc, const char* argv[]) {
 
       if (nj < 3) continue; // 3 jets -------------------------------
 
-      fill(h_pT_yy_3j, pT_yy);
-      fill(h_pT_j3, pT_j3);
+      match_truth_nj = nj.truth>=3;
 
-      // h_Dphi_Dy_jj( dphi_jj, dy_jj );
-      // h_Dphi_pi4_Dy_jj( phi_pi4(dphi_jj), dy_jj );
+      fill(h_pT_yy_3j, pT_yy, match_truth_nj);
+      fill(h_pT_j3, pT_j3, match_truth_nj);
     }
 
     for (const auto& h : hist<ivanp::index_axis<Int_t>>::all)
@@ -398,9 +418,6 @@ int main(int argc, const char* argv[]) {
 
     file->Close();
   }
-
-  h_N_j_incl = h_N_j_excl;
-  h_N_j_incl.integrate_left();
 
   for (const auto& h : hist<ivanp::index_axis<Int_t>>::all) {
     for (auto& b : h->bins()) b.compute();
