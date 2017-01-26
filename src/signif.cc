@@ -96,6 +96,20 @@ struct hist_bin {
 };
 double hist_bin::weight;
 
+std::ostream& operator<<(std::ostream& o, const hist_bin& b) {
+  const auto prec = o.precision();
+  const std::ios::fmtflags f( o.flags() );
+  o << round(b.sig) << ' '
+    << round(b.bkg) << ' '
+    << std::setprecision(2) << std::fixed
+    << b.signif << ' '
+    << 100*b.sb_purity << "% "
+    << 100*b.tr_purity << '%'
+    << std::setprecision(prec);
+  o.flags( f );
+  return o;
+}
+
 template <typename... Axes>
 using hist = ivanp::binner<hist_bin,
   std::tuple<ivanp::axis_spec<Axes>...>>;
@@ -105,28 +119,39 @@ template <size_t N>
 using re_hist = ivanp::binner<hist_bin,
   ivanp::tuple_of_same_t<ivanp::axis_spec<re_axis>,N>>;
 
-template <typename... Axes>
+template <typename A1>
 std::ostream& operator<<(std::ostream& o,
-  const ivanp::named_ptr<hist<Axes...>>& h
+  const ivanp::named_ptr<hist<A1>>& h
 ) {
-  const auto prec = o.precision();
-  const std::ios::fmtflags f( o.flags() );
   o << "\033[32m" << h.name << "\033[0m\n";
   const auto& a = h->axis();
   for (unsigned i=1, n=a.nbins()+2; i<n; ++i) {
-    const auto& b = h->bin(i);
     o << "\033[35m[" << a.lower(i) << ',';
     if (i==n-1) o << "∞";
     else o << a.upper(i);
-    o << ")\033[0m "
-      << round(b.sig) << ' '
-      << round(b.bkg) << ' '
-      << std::setprecision(2) << std::fixed
-      << b.signif << ' '
-      << 100*b.sb_purity << "% "
-      << 100*b.tr_purity << '%'
-      << std::setprecision(prec) << endl;
-    o.flags( f );
+    o << ")\033[0m " << h->bin(i) << endl;
+  }
+  return o;
+}
+
+template <typename A1, typename A2>
+std::ostream& operator<<(std::ostream& o,
+  const ivanp::named_ptr<hist<A1,A2>>& h
+) {
+  o << "\033[32m" << h.name << "\033[0m\n";
+  const auto& a1 = std::get<0>(h->axes());
+  const auto& a2 = std::get<1>(h->axes());
+  for (unsigned i1=1, n1=a1.nbins()+2; i1<n1; ++i1) {
+    o << "\033[35m[" << a1.lower(i1) << ',';
+    if (i1==n1-1) o << "∞";
+    else o << a1.upper(i1);
+    o << ")\033[0m \n";
+    for (unsigned i2=1, n2=a2.nbins()+2; i2<n2; ++i2) {
+      o << "  \033[35m[" << a2.lower(i2) << ',';
+      if (i2==n2-1) o << "∞";
+      else o << a2.upper(i2);
+      o << ")\033[0m " << h->bin(i1,i2) << endl;
+    }
   }
   return o;
 }
@@ -160,8 +185,8 @@ struct var<TTreeReaderValue<T>> {
   }
 };
 
-template <typename T, typename... Axes>
-void fill(hist<Axes...>& h, const var<T>& x, bool match=true) {
+template <typename T, typename Axis>
+void fill(hist<Axis>& h, const var<T>& x, bool match=true) {
   const auto bin_det = h.find_bin(x.det);
   if (is_mc) {
     const auto bin_truth = h.find_bin(x.truth);
@@ -169,8 +194,8 @@ void fill(hist<Axes...>& h, const var<T>& x, bool match=true) {
   } else h.fill_bin(bin_det);
 }
 
-template <typename T, typename... Axes>
-void fill_incl(hist<Axes...>& h, const var<T>& x) {
+template <typename T, typename Axis>
+void fill_incl(hist<Axis>& h, const var<T>& x) {
   const auto bin_det = h.find_bin(x.det);
   if (is_mc) {
     const auto bin_truth = h.find_bin(x.truth);
@@ -179,8 +204,28 @@ void fill_incl(hist<Axes...>& h, const var<T>& x) {
   } else for (unsigned i=bin_det; i!=0; --i) h.fill_bin(i);
 }
 
-double d1e3(double x) { return x*1e-3; }
-double _abs(double x) { return std::abs(x); }
+template <typename T1, typename T2, typename A1, typename A2>
+void fill(hist<A1,A2>& h, const var<T1>& x1, const var<T2>& x2, bool match=true) {
+  const auto bin_det = h.find_bin(x1.det,x2.det);
+  if (is_mc) {
+    const auto bin_truth = h.find_bin(x1.truth,x2.truth);
+    h.fill_bin(bin_det, is_fiducial && (bin_det == bin_truth) && match);
+  } else h.fill_bin(bin_det);
+}
+
+// functions applied to variables
+inline double d1e3(double x) noexcept { return x*1e-3; }
+inline double _abs(double x) noexcept { return std::abs(x); }
+inline double phi_pi4(double phi) noexcept {
+  phi += M_PI_4;
+  return (phi <= M_PI ? phi : phi - M_PI);
+}
+
+template <typename F, typename... T>
+auto apply(F f, const var<T>&... vars) -> var<decltype(f(vars.det...))> {
+  if (is_mc) return { f(vars.det...), f(vars.truth...) };
+  else return { f(vars.det...), { } };
+}
 
 int main(int argc, const char* argv[]) {
   const std::array<double,2> mass_range{105e3,160e3}, mass_window{121e3,129e3};
@@ -195,7 +240,7 @@ int main(int argc, const char* argv[]) {
     h_total("total",{0,1}),
     h_N_j_excl("N_j_excl",{0,4}),
     h_N_j_incl("N_j_incl",{0,4}),
-    h_VBF("VBF",{0,3});
+    h_VBF("VBF",{1,4});
 
   h_(pT_yy) h_(yAbs_yy) h_(cosTS_yy) h_(pTt_yy) h_(Dy_y_y)
   h_(HT)
@@ -212,6 +257,15 @@ int main(int argc, const char* argv[]) {
   // h_Dphi_pi4_Dy_jj("Dphi_pi4_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
   // h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
   // h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
+
+  using hist2 = hist<
+    ivanp::container_axis<std::vector<double>>,
+    ivanp::container_axis<std::vector<double>> >;
+  hist2
+    h_Dphi_Dy_jj("Dphi_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
+    h_Dphi_pi4_Dy_jj("Dphi_pi4_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
+    h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
+    h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
 
   std::vector<mxaod> mxaods;
   mxaods.reserve(argc-1);
@@ -238,7 +292,7 @@ int main(int argc, const char* argv[]) {
       mxaods.emplace_back(arg,true);
     } else if (std::regex_search(arg,end,match,lumi_re)) {
       lumi = std::stod(match[1]);
-      if (match[3].str()[0]=='f') lumi *= 1e3; // femto to pico
+      if (arg[match.position(3)]=='f') lumi *= 1e3; // femto to pico
     } else throw ivanp::exception("unrecognized argument: ",arg);
   }
   cout << "\n\033[36mTotal lumi\033[0m: " << lumi_in << " ipb" << endl;
@@ -306,15 +360,15 @@ int main(int argc, const char* argv[]) {
 
       const auto m_yy = *_m_yy;
       if (!in(m_yy.det,mass_range)) continue;
+      const bool is_in_window = in(m_yy.det,mass_window);
 
       if (is_mc) { // signal from MC
-        if (!in(m_yy.det,mass_window)) continue;
+        if (!is_in_window) continue;
         hist_bin::weight = (**_weight)*(**_cs_br_fe);
+        is_fiducial = **_isFiducial;
       } else { // background from data
-        if (in(m_yy.det,mass_window)) continue;
+        if (is_in_window) continue;
       }
-
-      is_fiducial = (is_mc ? **_isFiducial : false);
 
       // FILL HISTOGRAMS ============================================
 
@@ -334,7 +388,7 @@ int main(int argc, const char* argv[]) {
 
       fill(h_Dy_y_y, Dy_y_y);
       fill(h_pTt_yy, _pTt_yy(d1e3));
-      // h_cosTS_pT_yy( cosTS_yy, pT_yy );
+      fill(h_cosTS_pT_yy, cosTS_yy, pT_yy);
 
       fill(h_N_j_excl, nj);
       fill_incl(h_N_j_incl, nj);
@@ -356,13 +410,13 @@ int main(int argc, const char* argv[]) {
       fill(h_sumTau_yyj, _sumTau_yyj(d1e3), match_truth_nj);
       fill(h_maxTau_yyj, _maxTau_yyj(d1e3), match_truth_nj);
 
+      fill(h_pT_yy_pT_j1, pT_yy, pT_j1, match_truth_nj);
+
       if (nj == 1) {
         match_truth_nj = nj.truth==1;
         fill(h_pT_j1_excl, pT_j1, match_truth_nj);
         fill(h_pT_yy_1j, pT_yy, match_truth_nj);
       }
-
-      // h_pT_yy_pT_j1( pT_yy, pT_j1 );
 
       if (nj < 2) continue; // 2 jets -------------------------------
 
@@ -385,8 +439,8 @@ int main(int argc, const char* argv[]) {
 
       fill(h_pT_yyjj, _pT_yyjj(d1e3), match_truth_nj);
 
-      // h_Dphi_Dy_jj( dphi_jj, dy_jj );
-      // h_Dphi_pi4_Dy_jj( phi_pi4(dphi_jj), dy_jj );
+      fill(h_Dphi_Dy_jj, dphi_jj, dy_jj, match_truth_nj);
+      fill(h_Dphi_pi4_Dy_jj, apply(phi_pi4,dphi_jj), dy_jj, match_truth_nj);
 
       if (nj == 2) fill(h_pT_yy_2j, pT_yy, nj.truth==2);
 
@@ -394,13 +448,19 @@ int main(int argc, const char* argv[]) {
       var<double> pT_j3{0.,0.};
       if (nj > 2) pT_j3 = _pT_j3(d1e3);
 
-      if ( (m_jj > 600.) && (dy_jj > 4.0) ) {
-        if (pT_j3 < 30.) h_VBF(0);
-        if (pT_j3 < 25.) h_VBF(1);
-      }
-      if ( (m_jj > 400.) && (dy_jj > 2.8) ) {
-        if (pT_j3 < 30.) h_VBF(2);
-      }
+      auto VBF1 = apply([](double m_jj, double dy_jj, double pT_j3) {
+        return (m_jj > 600.) && (dy_jj > 4.0) && (pT_j3 < 30.);
+      }, m_jj, dy_jj, pT_j3);
+      auto VBF2 = apply([](double m_jj, double dy_jj, double pT_j3) {
+        return (m_jj > 600.) && (dy_jj > 4.0) && (pT_j3 < 25.);
+      }, m_jj, dy_jj, pT_j3);
+      auto VBF3 = apply([](double m_jj, double dy_jj, double pT_j3) {
+        return (m_jj > 400.) && (dy_jj > 2.8) && (pT_j3 < 30.);
+      }, m_jj, dy_jj, pT_j3);
+
+      if (VBF1.det) h_VBF(1,VBF1.det==VBF1.truth);
+      if (VBF2.det) h_VBF(2,VBF2.det==VBF2.truth);
+      if (VBF3.det) h_VBF(3,VBF3.det==VBF3.truth);
       // ------------------------------------------------------------
 
       if (nj < 3) continue; // 3 jets -------------------------------
@@ -415,6 +475,8 @@ int main(int argc, const char* argv[]) {
       for (auto& b : h->bins()) b.merge();
     for (const auto& h : re_hist<1>::all)
       for (auto& b : h->bins()) b.merge();
+    for (const auto& h : hist2::all)
+      for (auto& b : h->bins()) b.merge();
 
     file->Close();
   }
@@ -424,6 +486,10 @@ int main(int argc, const char* argv[]) {
     cout << h << endl;
   }
   for (const auto& h : re_hist<1>::all) {
+    for (auto& b : h->bins()) b.compute();
+    cout << h << endl;
+  }
+  for (const auto& h : hist2::all) {
     for (auto& b : h->bins()) b.compute();
     cout << h << endl;
   }

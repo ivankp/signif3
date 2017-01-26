@@ -140,6 +140,7 @@ private:
   template <typename T, typename... TT>
   constexpr size_type index_impl(T i, TT... ii) const noexcept {
     return i + (axis<naxes-sizeof...(TT)-1>().nbins()
+             + axis_spec<naxes-sizeof...(TT)-1>::nover::value
              - !axis_spec<naxes-sizeof...(TT)-1>::under::value)
       * index_impl(ii...);
   }
