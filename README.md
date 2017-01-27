@@ -69,10 +69,49 @@ fw = len(mass_window)/(len(mass_range)-len(mass_window));
 
 The "mass range" is 105 to 160 GeV and the "mass window" is 121 to 129 GeV.
 
+# Selection pseudo code
+```c++
+for ( /* event */ ) {
+
+  if (isPassed) continue;
+
+  if (!(105 < m_yy.det < 160)) continue;
+
+  if (is_mc) {
+
+    if (121 < m_yy.det < 129) {
+      // use variable's value for signal estimation for significance
+      ++sig;
+    }
+
+    if (105 < m_yy.truth < 160) {
+      // use variable's value for signal estimation at reco level for purity
+      ++reco;
+      if ( isFiducial && bin(var.det) == bin(var.truth) ) {
+        // use variable's value for signal estimation at truth level for purity
+        ++truth;
+      }
+    }
+
+  } else { // data
+
+    if (!(121 < m_yy.det < 129)) {
+      // use variable's value for background estimatio for significancen
+      ++bkg;
+    }
+
+  }
+
+}
+
+significance = sig/sqrt(sig+bkg);
+purity = truth/reco;
+```
+
 # Comments on the code
 
-The [outer loop][L193] in [`main`][L161] loops over the input files. Whether
-the file is data or MC is determined from the file name.
+The [outer loop][L308] in [`main`][L239] loops over the input files. Whether
+the file is data or MC is [determined][L276] from the file name.
 If the file is data, the respective luminosity is obtained from the file name
 as well.
 For MC files, the number of weighted events for the production process is taken
@@ -83,44 +122,45 @@ Events in the `CollectionTree` are read using
 and
 [`TTreeReaderValue`](https://root.cern.ch/doc/master/classTTreeReaderValue.html).
 
-To keep truth and reco level variables together, the [`var`][L121] struct
+To keep truth and reco level variables together, the [`var`][L36] struct
 template is defined. A template specialization is provided for
-[`var<TTreeReaderValue<T>>`][L128] for convenient variable definition. It ties
+[`var<TTreeReaderValue<T>>`][L51] for convenient variable definition. It ties
 the two value readers for the `"HGamEventInfoAuxDyn."` and
 `"HGamTruthEventInfoAuxDyn."` variables together.  The read values are returned
-with either `operator*` or `operator()` as a [`var<T>`][L121] struct. The type
+with either `operator*` or `operator()` as a [`var<T>`][L36] struct. The type
 `T` is converted to `double` for float point values.  The `operator()` takes a
 function as an argument, which is applied to both detector and truth level
 values.
 
-[`VAR_`][L243] and [`VAR30_`][L243] macros are defined for convenient
-construction of [`var<TTreeReaderValue<T>>`][L128] objects.
+[`VAR_`][L345] and [`VAR30_`][L346] macros are defined for convenient
+construction of [`var<TTreeReaderValue<T>>`][L51] objects.
 
-The [`fill`][L150] function template is defined to fill histograms with the
-values in [`var<T>`][L121].
+The [`fill`][L196] function templates are defined to fill histograms with the
+values in [`var<T>`][L36].
 
 The truth bin value is filled only if the event passes
 `HGamTruthEventInfoAuxDyn.isFiducial`
 and if the truth value corresponds to the same bin as at the detector level.
 
 The [`ivanp::binner`](src/binner.hh) class template is used for binning the
-variables. The [`hist`][L86], [`re_axis`][L89], and [`re_hist`][L91] aliases
+variables. The [`hist`][L150], [`re_axis`][L153], and [`re_hist`][L155] aliases
 are defined for convenience.
-Macro [`h_`][L169] is used for histogram definitions.
+Macro [`h_`][L246] is used for histogram definitions.
 
-struct [`hist_bin`][L33] defines the contents for every bin.
-[`operator++`][L47] and [`operator()`][L51] are called when the bin is filled.
+struct [`hist_bin`][L89] defines the contents for every bin.
+The [`operator()`][L102] are called when the bin is filled.
 
-[L33]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L33
-[L47]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L47
-[L51]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L51
-[L86]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L86
-[L89]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L89
-[L91]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L91
-[L121]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L121
-[L128]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L128
-[L150]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L150
-[L161]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L161
-[L169]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L169
-[L193]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L193
-[L243]: https://github.com/ivankp/signif3/blob/f19f822668f9fa60d88c1b9065de9cf38755343f/src/signif.cc#L243
+[L89]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L89
+[L102]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L51
+[L150]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L150
+[L153]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L153
+[L155]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L155
+[L36]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L36
+[L51]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L51
+[L196]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L196
+[L239]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L239
+[L276]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L276
+[L246]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L246
+[L308]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L308
+[L345]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L345
+[L346]: https://github.com/ivankp/signif3/blob/5f11c94377f947bcad65117793a02610bad741fc/src/signif.cc#L346

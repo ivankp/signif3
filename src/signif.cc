@@ -27,8 +27,48 @@ using std::cerr;
 using std::endl;
 using std::experimental::optional;
 
-bool is_mc, is_fiducial; // global variables
+// global variables =================================================
+bool is_mc, is_fiducial, is_in_window;
 double n_all_inv, factor, lumi = 0.;
+// ==================================================================
+
+template <typename T>
+struct var {
+  T det, truth;
+  inline bool operator==(const T& x) const noexcept { return (det == x); }
+  inline bool operator< (const T& x) const noexcept { return (det <  x); }
+  inline bool operator> (const T& x) const noexcept { return (det >  x); }
+
+  template <typename F>
+  inline auto operator()(F f) const noexcept(noexcept(f(std::declval<T>())))
+  -> var<decltype(f(std::declval<T>()))> {
+    if (is_mc) return { f(det), f(truth) };
+    else return { f(det), { } };
+  }
+};
+
+template <typename T>
+struct var<TTreeReaderValue<T>> {
+  TTreeReaderValue<T> det;
+  optional<TTreeReaderValue<T>> truth;
+  var(TTreeReader& tr, const std::string& name)
+  : det(tr,("HGamEventInfoAuxDyn."+name).c_str())
+  {
+    if (is_mc) truth.emplace(tr,("HGamTruthEventInfoAuxDyn."+name).c_str());
+  }
+  using ret_type = std::conditional_t<
+    std::is_floating_point<T>::value, double, T>;
+  inline var<ret_type> operator*() {
+    if (truth) return { *det, **truth };
+    else return { *det, { } };
+  }
+  template <typename F>
+  inline auto operator()(F f) noexcept(noexcept(f(std::declval<T>())))
+  -> var<decltype(f(std::declval<T>()))> {
+    if (truth) return { f(*det), f(**truth) };
+    else return { f(*det), { } };
+  }
+};
 
 class mxaod {
   TFile *ptr;
@@ -39,6 +79,8 @@ public:
     if (ptr->IsZombie()) throw ivanp::exception("cannot open file ",fname);
   }
   ~mxaod() { delete ptr; }
+  mxaod(const mxaod& o) = delete;
+  mxaod(mxaod&& o) noexcept: ptr(o.ptr), _is_mc(o._is_mc) { o.ptr = nullptr; }
   inline TFile* operator->() const noexcept { return ptr; }
   inline TFile* operator* () const noexcept { return ptr; }
   inline bool is_mc() const noexcept { return _is_mc; }
@@ -47,64 +89,58 @@ public:
 struct hist_bin {
   static double weight;
   double
-    tmp, tmp_truth,
-    sig, sig_truth,
-    bkg, signif,
-    sb_purity, // signal-background purity
-    tr_purity; // truth-reco purity
+    tmp_sig, // temporary for significance
+             // in window for mc, in range but not window for data
+    tmp_reco,  // mc reco in range, for purity
+    tmp_truth, // mc truth in range, for purity
+    bkg, sig,    // for significance
+    reco, truth; // for purity
 
-  hist_bin():
-    tmp(0), tmp_truth(0),
-    sig(0), sig_truth(0),
-    bkg(0), signif(0),
-    sb_purity(0), tr_purity(0) { }
-  inline hist_bin& operator++() noexcept {
-    tmp += weight;
-    return *this;
-  };
-  inline hist_bin& operator()(bool matches_truth) noexcept {
-    tmp += weight;
-    if (matches_truth) tmp_truth += weight;
-    return *this;
-  }
-  inline hist_bin& operator+=(const hist_bin& b) noexcept {
-    sig += b.sig;
-    sig_truth += b.sig_truth;
-    bkg += b.bkg;
-    return *this;
+  hist_bin(): tmp_sig(0), tmp_reco(0), tmp_truth(0),
+              bkg(0), sig(0), reco(0), truth(0) { }
+
+  inline void operator()(bool truth_match=true) noexcept {
+    if (is_mc) {
+      if (is_in_window) tmp_sig += weight; // cut for significance
+      tmp_reco += weight;
+      // is_fiducial includes mass check
+      if (is_fiducial && truth_match) tmp_truth += weight;
+    } else {
+      // alway fill data here
+      // the cut is in the event loop
+      tmp_sig += weight;
+    }
   }
 
   void merge() noexcept {
     if (is_mc) {
-      sig += tmp*n_all_inv;
-      sig_truth += tmp_truth*n_all_inv;
-      tmp_truth = 0;
+      sig += tmp_sig*n_all_inv; tmp_sig = 0;
+      reco += tmp_reco*n_all_inv; tmp_reco = 0;
+      truth += tmp_truth*n_all_inv; tmp_truth = 0;
     } else {
-      bkg += tmp;
+      bkg += tmp_sig; tmp_sig = 0;
     }
-    tmp = 0;
-  }
-  void compute() noexcept {
-    bkg *= factor;
-    sig *= lumi;
-    sig_truth *= lumi;
-    const double sb = sig + bkg;
-    signif = sig/std::sqrt(sb);
-    sb_purity = sig/sb;
-    tr_purity = sig_truth/sig;
   }
 };
 double hist_bin::weight;
 
 std::ostream& operator<<(std::ostream& o, const hist_bin& b) {
+  const double // compute significance and purity
+    bkg = b.bkg * factor,
+    sig = b.sig * lumi,
+    reco = b.reco * lumi,
+    truth = b.truth * lumi,
+    signif = sig/std::sqrt(sig+bkg),
+    purity = truth/reco;
+
   const auto prec = o.precision();
   const std::ios::fmtflags f( o.flags() );
-  o << round(b.sig) << ' '
-    << round(b.bkg) << ' '
+  o << round(sig) << ' '
+    << round(bkg) << ' '
     << std::setprecision(2) << std::fixed
-    << b.signif << ' '
-    << 100*b.sb_purity << "% "
-    << 100*b.tr_purity << '%'
+    << signif << ' '
+    << (100*sig/(sig+bkg)) << "% "
+    << (100*purity) << '%'
     << std::setprecision(prec);
   o.flags( f );
   return o;
@@ -156,41 +192,12 @@ std::ostream& operator<<(std::ostream& o,
   return o;
 }
 
-template <typename T>
-struct var {
-  T det, truth;
-  inline bool operator==(const T& x) const noexcept { return (det == x); }
-  inline bool operator< (const T& x) const noexcept { return (det <  x); }
-  inline bool operator> (const T& x) const noexcept { return (det >  x); }
-};
-template <typename T>
-struct var<TTreeReaderValue<T>> {
-  TTreeReaderValue<T> det;
-  optional<TTreeReaderValue<T>> truth;
-  var(TTreeReader& tr, const std::string& name)
-  : det(tr,("HGamEventInfoAuxDyn."+name).c_str())
-  {
-    if (is_mc) truth.emplace(tr,("HGamTruthEventInfoAuxDyn."+name).c_str());
-  }
-  using ret_type = std::conditional_t<
-    std::is_floating_point<T>::value, double, T>;
-  var<ret_type> operator*() {
-    if (truth) return { *det, **truth };
-    else return { *det, { } };
-  }
-  template <typename F>
-  var<ret_type> operator()(F f) {
-    if (truth) return { f(*det), f(**truth) };
-    else return { f(*det), { } };
-  }
-};
-
 template <typename T, typename Axis>
-void fill(hist<Axis>& h, const var<T>& x, bool match=true) {
+void fill(hist<Axis>& h, const var<T>& x, bool extra_truth_match=true) {
   const auto bin_det = h.find_bin(x.det);
   if (is_mc) {
     const auto bin_truth = h.find_bin(x.truth);
-    h.fill_bin(bin_det, is_fiducial && (bin_det == bin_truth) && match);
+    h.fill_bin(bin_det, (bin_det == bin_truth) && extra_truth_match);
   } else h.fill_bin(bin_det);
 }
 
@@ -200,16 +207,18 @@ void fill_incl(hist<Axis>& h, const var<T>& x) {
   if (is_mc) {
     const auto bin_truth = h.find_bin(x.truth);
     for (unsigned i=bin_det; i!=0; --i)
-      h.fill_bin(i, is_fiducial && (bin_truth >= i));
+      h.fill_bin(i, bin_truth >= i);
   } else for (unsigned i=bin_det; i!=0; --i) h.fill_bin(i);
 }
 
 template <typename T1, typename T2, typename A1, typename A2>
-void fill(hist<A1,A2>& h, const var<T1>& x1, const var<T2>& x2, bool match=true) {
+void fill(hist<A1,A2>& h, const var<T1>& x1, const var<T2>& x2,
+  bool extra_truth_match=true
+) {
   const auto bin_det = h.find_bin(x1.det,x2.det);
   if (is_mc) {
     const auto bin_truth = h.find_bin(x1.truth,x2.truth);
-    h.fill_bin(bin_det, is_fiducial && (bin_det == bin_truth) && match);
+    h.fill_bin(bin_det, (bin_det == bin_truth) && extra_truth_match);
   } else h.fill_bin(bin_det);
 }
 
@@ -253,11 +262,6 @@ int main(int argc, const char* argv[]) {
   h_(pT_yy_0j) h_(pT_yy_1j) h_(pT_yy_2j) h_(pT_yy_3j)
   h_(pT_j1_excl)
 
-  // h_Dphi_Dy_jj("Dphi_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
-  // h_Dphi_pi4_Dy_jj("Dphi_pi4_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
-  // h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
-  // h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
-
   using hist2 = hist<
     ivanp::container_axis<std::vector<double>>,
     ivanp::container_axis<std::vector<double>> >;
@@ -295,7 +299,8 @@ int main(int argc, const char* argv[]) {
       if (arg[match.position(3)]=='f') lumi *= 1e3; // femto to pico
     } else throw ivanp::exception("unrecognized argument: ",arg);
   }
-  cout << "\n\033[36mTotal lumi\033[0m: " << lumi_in << " ipb" << endl;
+  cout << "\n\033[36mTotal data lumi\033[0m: "
+       << lumi_in << " ipb" << endl;
   if (lumi!=0.) factor *= (lumi / lumi_in);
   else lumi = lumi_in;
   cout << "Scaling to " << lumi << " ipb" << endl << endl;
@@ -356,16 +361,19 @@ int main(int argc, const char* argv[]) {
     // loop over events =============================================
     using tc = ivanp::timed_counter<Long64_t>;
     for (tc ent(reader.GetEntries(true)); reader.Next(); ++ent) {
+
+      // selection cut
       if (!*_isPassed) continue;
 
+      // diphoton mass cut
       const auto m_yy = *_m_yy;
       if (!in(m_yy.det,mass_range)) continue;
-      const bool is_in_window = in(m_yy.det,mass_window);
+
+      is_in_window = in(m_yy.det,mass_window);
 
       if (is_mc) { // signal from MC
-        if (!is_in_window) continue;
         hist_bin::weight = (**_weight)*(**_cs_br_fe);
-        is_fiducial = **_isFiducial;
+        is_fiducial = **_isFiducial && in(m_yy.truth,mass_range);
       } else { // background from data
         if (is_in_window) continue;
       }
@@ -380,7 +388,7 @@ int main(int argc, const char* argv[]) {
       const auto cosTS_yy = _cosTS_yy(_abs);
       const auto Dy_y_y = _Dy_y_y(_abs);
 
-      h_total(0, is_fiducial);
+      h_total(0);
 
       fill(h_pT_yy, pT_yy);
       fill(h_yAbs_yy, yAbs_yy);
@@ -440,7 +448,7 @@ int main(int argc, const char* argv[]) {
       fill(h_pT_yyjj, _pT_yyjj(d1e3), match_truth_nj);
 
       fill(h_Dphi_Dy_jj, dphi_jj, dy_jj, match_truth_nj);
-      fill(h_Dphi_pi4_Dy_jj, apply(phi_pi4,dphi_jj), dy_jj, match_truth_nj);
+      fill(h_Dphi_pi4_Dy_jj, dphi_jj(phi_pi4), dy_jj, match_truth_nj);
 
       if (nj == 2) fill(h_pT_yy_2j, pT_yy, nj.truth==2);
 
@@ -458,9 +466,9 @@ int main(int argc, const char* argv[]) {
         return (m_jj > 400.) && (dy_jj > 2.8) && (pT_j3 < 30.);
       }, m_jj, dy_jj, pT_j3);
 
-      if (VBF1.det) h_VBF(1,VBF1.det==VBF1.truth);
-      if (VBF2.det) h_VBF(2,VBF2.det==VBF2.truth);
-      if (VBF3.det) h_VBF(3,VBF3.det==VBF3.truth);
+      if (VBF1.det) h_VBF.fill_bin(1,VBF1.det==VBF1.truth);
+      if (VBF2.det) h_VBF.fill_bin(2,VBF2.det==VBF2.truth);
+      if (VBF3.det) h_VBF.fill_bin(3,VBF3.det==VBF3.truth);
       // ------------------------------------------------------------
 
       if (nj < 3) continue; // 3 jets -------------------------------
@@ -481,18 +489,9 @@ int main(int argc, const char* argv[]) {
     file->Close();
   }
 
-  for (const auto& h : hist<ivanp::index_axis<Int_t>>::all) {
-    for (auto& b : h->bins()) b.compute();
-    cout << h << endl;
-  }
-  for (const auto& h : re_hist<1>::all) {
-    for (auto& b : h->bins()) b.compute();
-    cout << h << endl;
-  }
-  for (const auto& h : hist2::all) {
-    for (auto& b : h->bins()) b.compute();
-    cout << h << endl;
-  }
+  for (const auto& h : hist<ivanp::index_axis<Int_t>>::all) cout << h << endl;
+  for (const auto& h : re_hist<1>::all) cout << h << endl;
+  for (const auto& h : hist2::all) cout << h << endl;
 
   return 0;
 }
