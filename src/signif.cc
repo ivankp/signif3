@@ -237,9 +237,46 @@ auto apply(F f, const var<T>&... vars) -> var<decltype(f(vars.det...))> {
 }
 
 int main(int argc, const char* argv[]) {
-  const std::array<double,2> mass_range{105e3,160e3}, mass_window{121e3,129e3};
-  factor = len(mass_window)/(len(mass_range)-len(mass_window));
+  const std::array<double,2> myy_range{105e3,160e3}, myy_window{121e3,129e3};
+  factor = len(myy_window)/(len(myy_range)-len(myy_window));
   double lumi_in = 0.;
+
+  std::vector<mxaod> mxaods;
+  mxaods.reserve(argc-1);
+  for (int a=1; a<argc; ++a) { // loop over arguments
+    // validate args and parse names of input files
+    static const std::regex data_re(
+      "^(.*/)?data.*_(\\d*)ipb.*\\.root$", std::regex::optimize);
+    static const std::regex mc_re(
+      "^(.*/)?mc.*\\.root$", std::regex::optimize);
+    static const std::regex lumi_re(
+      "([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?) *i([pf])b$",
+      std::regex::optimize);
+    std::cmatch match;
+
+    const char *arg = argv[a], *end = arg+std::strlen(arg);
+    if (std::regex_search(arg,end,match,data_re)) { // Data
+      const double flumi = std::stod(match[2]);
+      lumi_in += flumi;
+      cout << "\033[36mData\033[0m: " << arg << endl;
+      cout << "\033[36mLumi\033[0m: " << flumi << " ipb" << endl;
+      mxaods.emplace_back(arg,false);
+    } else if (std::regex_search(arg,end,match,mc_re)) { // MC
+      cout << "\033[36mMC\033[0m: " << arg << endl;
+      mxaods.emplace_back(arg,true);
+    } else if (std::regex_search(arg,end,match,lumi_re)) {
+      lumi = std::stod(match[1]);
+      if (arg[match.position(3)]=='f') lumi *= 1e3; // femto to pico
+    } else {
+      cerr << "arg error: unrecognized argument: " << arg << endl;
+      return 1;
+    }
+  }
+  cout << "\n\033[36mTotal data lumi\033[0m: "
+       << lumi_in << " ipb" << endl;
+  if (lumi!=0.) factor *= (lumi / lumi_in);
+  else lumi = lumi_in;
+  cout << "Scaling to " << lumi << " ipb" << endl << endl;
 
   re_axes ra("hgam.bins");
   // Histogram definitions ==========================================
@@ -270,40 +307,6 @@ int main(int argc, const char* argv[]) {
     h_Dphi_pi4_Dy_jj("Dphi_pi4_Dy_jj",{0.,M_PI_2,M_PI},{0.,2.,8.8}),
     h_cosTS_pT_yy("cosTS_pT_yy",{0.,0.5,1.},{0.,30.,120.,400.}),
     h_pT_yy_pT_j1("pT_yy_pT_j1",{0.,30.,120.,400.},{30.,65.,400.});
-
-  std::vector<mxaod> mxaods;
-  mxaods.reserve(argc-1);
-  for (int a=1; a<argc; ++a) { // loop over arguments
-    // validate args and parse names of input files
-    static const std::regex data_re(
-      "^(.*/)?data.*_(\\d*)ipb.*\\.root$", std::regex::optimize);
-    static const std::regex mc_re(
-      "^(.*/)?mc.*\\.root$", std::regex::optimize);
-    static const std::regex lumi_re(
-      "([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?) *i([pf])b$",
-      std::regex::optimize);
-    std::cmatch match;
-
-    const char *arg = argv[a], *end = arg+std::strlen(arg);
-    if (std::regex_search(arg,end,match,data_re)) { // Data
-      const double flumi = std::stod(match[2]);
-      lumi_in += flumi;
-      cout << "\033[36mData\033[0m: " << arg << endl;
-      cout << "\033[36mLumi\033[0m: " << flumi << " ipb" << endl;
-      mxaods.emplace_back(arg,false);
-    } else if (std::regex_search(arg,end,match,mc_re)) { // MC
-      cout << "\033[36mMC\033[0m: " << arg << endl;
-      mxaods.emplace_back(arg,true);
-    } else if (std::regex_search(arg,end,match,lumi_re)) {
-      lumi = std::stod(match[1]);
-      if (arg[match.position(3)]=='f') lumi *= 1e3; // femto to pico
-    } else throw ivanp::exception("unrecognized argument: ",arg);
-  }
-  cout << "\n\033[36mTotal data lumi\033[0m: "
-       << lumi_in << " ipb" << endl;
-  if (lumi!=0.) factor *= (lumi / lumi_in);
-  else lumi = lumi_in;
-  cout << "Scaling to " << lumi << " ipb" << endl << endl;
 
   for (auto& file : mxaods) { // loop over MxAODs
     is_mc = file.is_mc();
@@ -367,13 +370,13 @@ int main(int argc, const char* argv[]) {
 
       // diphoton mass cut
       const auto m_yy = *_m_yy;
-      if (!in(m_yy.det,mass_range)) continue;
+      if (!in(m_yy.det,myy_range)) continue;
 
-      is_in_window = in(m_yy.det,mass_window);
+      is_in_window = in(m_yy.det,myy_window);
 
       if (is_mc) { // signal from MC
         hist_bin::weight = (**_weight)*(**_cs_br_fe);
-        is_fiducial = **_isFiducial && in(m_yy.truth,mass_range);
+        is_fiducial = **_isFiducial && in(m_yy.truth,myy_range);
       } else { // background from data
         if (is_in_window) continue;
       }

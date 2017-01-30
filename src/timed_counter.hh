@@ -90,6 +90,8 @@ public:
   inline I operator-= (T i) { print_check(); return cnt -= i; }
 
   template <typename T>
+  inline bool operator== (T i) const noexcept { return cnt == i; }
+  template <typename T>
   inline bool operator<  (T i) const noexcept { return cnt <  i; }
   template <typename T>
   inline bool operator<= (T i) const noexcept { return cnt <= i; }

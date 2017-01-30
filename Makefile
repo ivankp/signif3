@@ -10,6 +10,9 @@ ROOT_LIBS   := $(shell root-config --libs)
 C_signif := $(ROOT_CFLAGS)
 L_signif := $(ROOT_LIBS) -lTreePlayer
 
+C_mig := $(ROOT_CFLAGS)
+L_mig := $(ROOT_LIBS) -lTreePlayer
+
 SRC := src
 BIN := bin
 BLD := .build
@@ -30,7 +33,7 @@ ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
 -include $(DEPS)
 endif
 
-$(BIN)/signif: $(BLD)/re_axes.o
+$(BIN)/signif $(BIN)/mig: $(BLD)/re_axes.o
 
 $(DEPS): $(BLD)/%.d: $(SRC)/%.cc | $(BLD)
 	$(CXX) $(DF) -MM -MT '$(@:.d=.o)' $< -MF $@

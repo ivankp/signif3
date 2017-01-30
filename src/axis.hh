@@ -357,6 +357,9 @@ public:
   inline edge_cref lower(size_type bin) const { return _ref->lower(bin); }
   inline edge_cref upper(size_type bin) const { return _ref->upper(bin); }
 
+  decltype(auto) operator* () const { return *_ref; }
+  decltype(auto) operator->() const { return  _ref; }
+
 };
 
 // Factory functions ================================================

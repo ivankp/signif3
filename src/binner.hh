@@ -97,11 +97,13 @@ private:
   guard_over(size_type bin) const noexcept { return false; }
   template <size_t I, typename A = axis_spec<I>>
   constexpr std::enable_if_t<!A::over::value && !A::excep::value,bool>
-  guard_over(size_type bin) const noexcept { return (bin>axis<I>().nbins()); }
+  guard_over(size_type bin) const noexcept {
+    return (bin > (axis<I>().nedges()-1));
+  }
   template <size_t I, typename A = axis_spec<I>>
   constexpr std::enable_if_t<!A::over::value && A::excep::value,bool>
   guard_over(size_type bin) const {
-    if (bin>axis<I>().nbins()) throw std::out_of_range("axis overflow");
+    if (bin > (axis<I>().nedges()-1)) throw std::out_of_range("axis overflow");
     return false;
   }
 
