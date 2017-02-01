@@ -34,7 +34,7 @@ private:
   time_type last;
   bool past1s;
   int nb;
-  compare_type cmp();
+  compare_type cmp;
 
   static const std::locale cnt_locale;
 
