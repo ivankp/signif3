@@ -251,7 +251,7 @@ public:
 
 template <typename EdgeType = ivanp::axis_size_type, bool Inherit=false>
 class index_axis final: public std::conditional_t<Inherit,
-  abstract_axis<ivanp::axis_size_type>, axis_base>
+  abstract_axis<EdgeType>, axis_base>
 {
   static_assert(std::is_integral<EdgeType>::value,"");
 public:

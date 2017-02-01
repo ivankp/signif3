@@ -39,15 +39,13 @@ public:
     using namespace ivanp;
     const unsigned ncheck = call( check<B...>, x,
       index_sequence_tail<1,sizeof...(B)+1>{});
-    test( nchecks )
-    test( std::get<1>(x) )
-    test( std::get<2>(x) )
-    if (sizeof...(B) != nchecks) throw std::length_error(
+    if (__builtin_expect(sizeof...(B) != nchecks,0)) throw std::length_error(
       "sizeof...(B) != nchecks");
     unsigned bin;
-    if (ncheck==sizeof...(B)) bin = _axis->find_bin(std::get<0>(x));
-    else bin = _axis->nbins() + 2 + ncheck;
-    test( bin )
+    if (ncheck==sizeof...(B)) {
+      bin = _axis->find_bin(std::get<0>(x));
+      if (bin) bin += sizeof...(B);
+    } else bin = ncheck + 1;
     return bin;
   }
 };

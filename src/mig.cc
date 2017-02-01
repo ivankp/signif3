@@ -40,6 +40,8 @@ struct var {
   VAR_OP(<=)
   VAR_OP(>)
   VAR_OP(>=)
+  VAR_OP(/)
+  VAR_OP(*)
 
   template <typename F>
   inline auto operator()(F f) const noexcept(noexcept(f(std::declval<T>())))
@@ -68,38 +70,66 @@ var<bool> passed;
 
 struct hist_bin {
   static double weight;
-  double tmp, x;
+  double tmp, w;
 
   inline hist_bin& operator++() noexcept { tmp += weight; return *this; }
 
   void merge() noexcept {
-    x += tmp*n_all_inv;
+    w += tmp*n_all_inv;
     tmp = 0;
   }
 };
 double hist_bin::weight;
 
+template <typename T>
 using hist = ivanp::binner<hist_bin, ivanp::tuple_of_same_t<
-  ivanp::axis_spec<migration_axis<double>,false,false>,2>>;
+  ivanp::axis_spec<migration_axis<T>,true,true>,2>>;
+  // ivanp::axis_spec<migration_axis<T>,false,false>,2>>;
 
 auto make_hist(const char* name, const re_axes& ra, unsigned nchecks) {
   migration_axis<double> axis(&*ra[name],nchecks);
-  return hist( name, axis, axis );
+  return hist<double>( name, axis, axis );
 }
 
-template <typename T, typename... B>
-void fill(hist& h, const var<T>& x, const var<B>&... checks) {
-  auto hbin = 
+template <typename A, typename T, typename... B>
+void fill(ivanp::binner<hist_bin,std::tuple<A,A>>& h,
+  const var<T>& x, const var<B>&... checks
+) {
   h( std::tie(x.det,   passed.det,   checks.det...),
      std::tie(x.truth, passed.truth, checks.truth...) );
-  test( hbin )
+}
+
+template <typename A>
+std::ostream& operator<<(std::ostream& o,
+  const ivanp::named_ptr<ivanp::binner<hist_bin,std::tuple<A,A>>>& h
+) {
+  std::ios::fmtflags f(cout.flags());
+  auto prec = cout.precision();
+  cout.precision(2);
+  cout << std::fixed;
+
+  o << "\033[32m" << h.name << "\033[0m\n";
+  const unsigned n = h->axis().nbins() + A::nover::value;
+  unsigned i = 0;
+  for (auto& b : h->bins()) {
+    cout << ' ' << std::setw(7) << b.w*lumi;
+    if (++i == n) { cout << endl; i = 0; }
+  }
+
+  cout.flags(f);
+  cout.precision(prec);
+  return o;
 }
 
 inline double _abs(double x) noexcept { return std::abs(x); }
 
 int main(int argc, char* argv[]) {
+  if (argc==1) {
+    cout << "usage: " << argv[0] << " mc*.root 36ifb" << endl;
+    return 1;
+  }
   const std::array<double,2> myy_range{105e3,160e3};
-  double lumi = 0.;
+  // const std::array<double,2> myy_range{121e3,129e3};
 
   std::vector<std::unique_ptr<TFile>> mxaods;
   mxaods.reserve(argc-2);
@@ -140,24 +170,20 @@ int main(int argc, char* argv[]) {
   // Histogram definitions ==========================================
 #define h_(NAME, N) auto h_##NAME = make_hist(#NAME,ra,N);
 
-  // hist<ivanp::index_axis<Int_t>>
-  //   h_total("total",{0,1}),
-  //   h_N_j_excl("N_j_excl",{0,4}),
-  //   h_N_j_incl("N_j_incl",{0,4}),
-  //   h_VBF("VBF",{1,4});
+  ivanp::index_axis<Int_t,true> nj_axis(0,4);
+  hist<Int_t>
+    h_N_j_excl("N_j_excl",{&nj_axis,1},{&nj_axis,1});
 
-  // h_(pT_yy) h_(yAbs_yy) h_(cosTS_yy) h_(pTt_yy) h_(Dy_y_y)
-  // h_(HT)
-  // h_(pT_j1) h_(pT_j2) h_(pT_j3)
-  // h_(yAbs_j1) h_(yAbs_j2)
-  // h_(Dphi_j_j) h_(Dphi_j_j_signed)
-  // h_(Dy_j_j) h_(m_jj)
-  // h_(pT_yyjj) h_(Dphi_yy_jj)
-  // h_(sumTau_yyj) h_(maxTau_yyj)
-  // h_(pT_yy_0j) h_(pT_yy_1j) h_(pT_yy_2j) h_(pT_yy_3j)
-  // h_(pT_j1_excl)
-
-  h_(Dphi_j_j,2)
+  h_(pT_yy,1) h_(yAbs_yy,1) h_(cosTS_yy,1) h_(pTt_yy,1) h_(Dy_y_y,1)
+  h_(HT,1)
+  h_(pT_j1,2) h_(pT_j2,2) h_(pT_j3,2)
+  h_(yAbs_j1,2) h_(yAbs_j2,2)
+  h_(Dphi_j_j,2) h_(Dphi_j_j_signed,2)
+  h_(Dy_j_j,2) h_(m_jj,2)
+  h_(pT_yyjj,2) h_(Dphi_yy_jj,2)
+  h_(sumTau_yyj,2) h_(maxTau_yyj,2)
+  h_(pT_yy_0j,2) h_(pT_yy_1j,2) h_(pT_yy_2j,2) h_(pT_yy_3j,2)
+  h_(pT_j1_excl,2)
 
   for (auto& file : mxaods) { // loop over MxAODs
     cout << "\033[36mMC\033[0m: " << file->GetName() << endl;
@@ -214,39 +240,67 @@ int main(int argc, char* argv[]) {
       if (!in(m_yy.det,myy_range)) continue;
 
       hist_bin::weight = (*_weight)*(*_cs_br_fe);
-      test( hist_bin::weight )
+      // test( hist_bin::weight )
 
       passed = {*_isPassed,*_isFiducial && in(m_yy.truth,myy_range)};
 
       // FILL HISTOGRAMS ============================================
       const auto nj = *_N_j;
 
-      const auto dphi_jj = _Dphi_j_j(_abs);
+      const auto pT_yy = *_pT_yy/1e3;
+      fill(h_pT_yy, pT_yy);
+      fill(h_pT_yy_0j, pT_yy, nj==0);
+      fill(h_pT_yy_1j, pT_yy, nj==1);
+      fill(h_pT_yy_2j, pT_yy, nj==2);
+      fill(h_pT_yy_3j, pT_yy, nj>=3);
 
-      if (dphi_jj.det == 99) continue;
+      fill(h_yAbs_yy, *_yAbs_yy);
+      fill(h_cosTS_yy, _cosTS_yy(_abs));
 
-      test( nj.det )
-      test( nj.truth )
-      test( dphi_jj.det )
-      test( dphi_jj.truth )
+      fill(h_Dy_y_y, _Dy_y_y(_abs));
+      fill(h_pTt_yy, *_pTt_yy/1e3);
 
-      fill(h_Dphi_j_j, dphi_jj, nj>=2);
+      fill(h_N_j_excl, nj);
 
-      // if (ent==4) break;
-      // cout << endl;
+      fill(h_HT, *_HT/1e3);
+
+      const auto pT_j1 = *_pT_j1/1e3;
+      fill(h_pT_j1, pT_j1, nj>=1);
+      fill(h_pT_j1_excl, pT_j1, nj==1);
+      fill(h_yAbs_j1, *_yAbs_j1, nj>=1);
+
+      fill(h_pT_j2, *_pT_j2/1e3, nj>=2);
+      fill(h_yAbs_j2, *_yAbs_j2, nj>=2);
+
+      fill(h_pT_j3, *_pT_j3/1e3, nj>=3);
+
+      fill(h_sumTau_yyj, *_sumTau_yyj/1e3, nj>=1);
+      fill(h_maxTau_yyj, *_maxTau_yyj/1e3, nj>=1);
+
+      fill(h_Dphi_j_j, _Dphi_j_j(_abs), nj>=2);
+      fill(h_Dy_j_j, _Dy_j_j(_abs), nj>=2);
+
+      fill(h_Dphi_yy_jj, _Dphi_yy_jj([](auto x){ return M_PI - std::abs(x);}),
+           nj>=2);
+
+      fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed, nj>=2);
+      fill(h_Dphi_j_j, _Dphi_j_j(_abs), nj>=2);
+      fill(h_m_jj, *_m_jj/1e3, nj>=2);
+
+      fill(h_pT_yyjj, *_pT_yyjj/1e3, nj>=2);
     }
 
-    for (const auto& h : hist::all)
+    for (const auto& h : hist<Int_t>::all)
+      for (auto& b : h->bins()) b.merge();
+    for (const auto& h : hist<double>::all)
       for (auto& b : h->bins()) b.merge();
 
     file->Close();
   }
 
-  for (const auto& h : hist::all) {
-    cout << h.name << endl;
-    for (auto& b : h->bins()) cout << b.x*lumi << endl;
-    cout << endl;
-  }
+  cout << endl;
+  for (const auto& h : hist<Int_t>::all) cout << h << endl;
+  for (const auto& h : hist<double>::all) cout << h << endl;
 
   return 0;
 }

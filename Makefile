@@ -1,6 +1,6 @@
 STD := -std=c++14
 DF := $(STD) -Isrc
-CF := $(STD) -Wall -O3 -fmax-errors=3 -flto -Isrc
+CF := $(STD) -Wall -O3 -fmax-errors=2 -flto -Isrc
 LF := $(STD) -flto
 
 # ROOT_CFLAGS := $(shell root-config --cflags)
@@ -33,7 +33,7 @@ ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
 -include $(DEPS)
 endif
 
-$(BIN)/signif $(BIN)/mig: $(BLD)/re_axes.o
+$(BIN)/test $(BIN)/signif $(BIN)/mig: $(BLD)/re_axes.o
 
 $(DEPS): $(BLD)/%.d: $(SRC)/%.cc | $(BLD)
 	$(CXX) $(DF) -MM -MT '$(@:.d=.o)' $< -MF $@
