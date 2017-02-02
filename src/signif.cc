@@ -18,6 +18,7 @@
 #include "timed_counter.hh"
 #include "array_ops.hh"
 #include "exception.hh"
+#include "prtbins.hh"
 
 #define test(var) \
   std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
@@ -102,43 +103,6 @@ using re_axis = typename re_axes::axis_type;
 template <size_t N>
 using re_hist = ivanp::binner<hist_bin,
   ivanp::tuple_of_same_t<ivanp::axis_spec<re_axis>,N>>;
-
-template <typename A1>
-std::ostream& operator<<(std::ostream& o,
-  const ivanp::named_ptr<hist<A1>>& h
-) {
-  o << "\033[32m" << h.name << "\033[0m\n";
-  const auto& a = h->axis();
-  for (unsigned i=1, n=a.nbins()+2; i<n; ++i) {
-    o << "\033[35m[" << a.lower(i) << ',';
-    if (i==n-1) o << "∞";
-    else o << a.upper(i);
-    o << ")\033[0m " << h->bin(i) << endl;
-  }
-  return o;
-}
-
-template <typename A1, typename A2>
-std::ostream& operator<<(std::ostream& o,
-  const ivanp::named_ptr<hist<A1,A2>>& h
-) {
-  o << "\033[32m" << h.name << "\033[0m\n";
-  const auto& a1 = std::get<0>(h->axes());
-  const auto& a2 = std::get<1>(h->axes());
-  for (unsigned i1=1, n1=a1.nbins()+2; i1<n1; ++i1) {
-    o << "\033[35m[" << a1.lower(i1) << ',';
-    if (i1==n1-1) o << "∞";
-    else o << a1.upper(i1);
-    o << ")\033[0m \n";
-    for (unsigned i2=1, n2=a2.nbins()+2; i2<n2; ++i2) {
-      o << "  \033[35m[" << a2.lower(i2) << ',';
-      if (i2==n2-1) o << "∞";
-      else o << a2.upper(i2);
-      o << ")\033[0m " << h->bin(i1,i2) << endl;
-    }
-  }
-  return o;
-}
 
 template <typename T, typename Axis>
 void fill(hist<Axis>& h, const var<T>& x, bool extra_truth_match=true) {
