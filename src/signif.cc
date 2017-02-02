@@ -29,46 +29,8 @@ using std::experimental::optional;
 
 // global variables =================================================
 bool is_mc, is_fiducial, is_in_window;
-double n_all_inv, factor, lumi = 0.;
 // ==================================================================
-
-template <typename T>
-struct var {
-  T det, truth;
-  inline bool operator==(const T& x) const noexcept { return (det == x); }
-  inline bool operator< (const T& x) const noexcept { return (det <  x); }
-  inline bool operator> (const T& x) const noexcept { return (det >  x); }
-
-  template <typename F>
-  inline auto operator()(F f) const noexcept(noexcept(f(std::declval<T>())))
-  -> var<decltype(f(std::declval<T>()))> {
-    if (is_mc) return { f(det), f(truth) };
-    else return { f(det), { } };
-  }
-};
-
-template <typename T>
-struct var<TTreeReaderValue<T>> {
-  TTreeReaderValue<T> det;
-  optional<TTreeReaderValue<T>> truth;
-  var(TTreeReader& tr, const std::string& name)
-  : det(tr,("HGamEventInfoAuxDyn."+name).c_str())
-  {
-    if (is_mc) truth.emplace(tr,("HGamTruthEventInfoAuxDyn."+name).c_str());
-  }
-  using ret_type = std::conditional_t<
-    std::is_floating_point<T>::value, double, T>;
-  inline var<ret_type> operator*() {
-    if (truth) return { *det, **truth };
-    else return { *det, { } };
-  }
-  template <typename F>
-  inline auto operator()(F f) noexcept(noexcept(f(std::declval<T>())))
-  -> var<decltype(f(std::declval<T>()))> {
-    if (truth) return { f(*det), f(**truth) };
-    else return { f(*det), { } };
-  }
-};
+#include "truth_reco_var.hh"
 
 class mxaod {
   TFile *ptr;
@@ -89,36 +51,24 @@ public:
 struct hist_bin {
   static double weight;
   double
-    tmp_sig, // temporary for significance
-             // in window for mc, in range but not window for data
-    tmp_reco,  // mc reco in range, for purity
-    tmp_truth, // mc truth in range, for purity
-    bkg, sig,    // for significance
-    reco, truth; // for purity
+    bkg = 0, sig = 0, // for significance
+    bkg2 = 0, sig2 = 0, // square for uncertainty
+    reco = 0, truth = 0; // for purity
 
-  hist_bin(): tmp_sig(0), tmp_reco(0), tmp_truth(0),
-              bkg(0), sig(0), reco(0), truth(0) { }
-
-  inline void operator()(bool truth_match=true) noexcept {
+  void operator()(bool truth_match=true) noexcept {
     if (is_mc) {
-      if (is_in_window) tmp_sig += weight; // cut for significance
-      tmp_reco += weight;
+      if (is_in_window) { // cut for significance
+        sig += weight;
+        sig2 += weight*weight;
+      }
+      reco += weight;
       // is_fiducial includes mass check
-      if (is_fiducial && truth_match) tmp_truth += weight;
+      if (is_fiducial && truth_match) truth += weight;
     } else {
       // alway fill data here
       // the cut is in the event loop
-      tmp_sig += weight;
-    }
-  }
-
-  void merge() noexcept {
-    if (is_mc) {
-      sig += tmp_sig*n_all_inv; tmp_sig = 0;
-      reco += tmp_reco*n_all_inv; tmp_reco = 0;
-      truth += tmp_truth*n_all_inv; tmp_truth = 0;
-    } else {
-      bkg += tmp_sig; tmp_sig = 0;
+      bkg += weight;
+      bkg2 += weight*weight;
     }
   }
 };
@@ -126,21 +76,19 @@ double hist_bin::weight;
 
 std::ostream& operator<<(std::ostream& o, const hist_bin& b) {
   const double // compute significance and purity
-    bkg = b.bkg * factor,
-    sig = b.sig * lumi,
-    reco = b.reco * lumi,
-    truth = b.truth * lumi,
-    signif = sig/std::sqrt(sig+bkg),
-    purity = truth/reco;
+    signif = b.sig/std::sqrt(b.sig+b.bkg),
+    purity = b.truth/b.reco;
 
   const auto prec = o.precision();
   const std::ios::fmtflags f( o.flags() );
-  o << round(sig) << ' '
-    << round(bkg) << ' '
-    << std::setprecision(2) << std::fixed
-    << signif << ' '
-    << (100*sig/(sig+bkg)) << "% "
-    << (100*purity) << '%'
+  o << std::fixed << std::setprecision(2)
+    << b.sig << ' ' // number of signal events
+    << std::sqrt(b.sig2) << ' ' // uncertainty
+    << b.bkg << ' ' // number of background events
+    << std::sqrt(b.bkg2) << ' ' // uncertainty
+    << signif << ' ' // significance
+    << (100*b.sig/(b.sig+b.bkg)) << "% " // s/(s+b)
+    << (100*purity) << '%' // purity
     << std::setprecision(prec);
   o.flags( f );
   return o;
@@ -223,8 +171,6 @@ void fill(hist<A1,A2>& h, const var<T1>& x1, const var<T2>& x2,
 }
 
 // functions applied to variables
-inline double d1e3(double x) noexcept { return x*1e-3; }
-inline double _abs(double x) noexcept { return std::abs(x); }
 inline double phi_pi4(double phi) noexcept {
   phi += M_PI_4;
   return (phi <= M_PI ? phi : phi - M_PI);
@@ -238,8 +184,8 @@ auto apply(F f, const var<T>&... vars) -> var<decltype(f(vars.det...))> {
 
 int main(int argc, const char* argv[]) {
   const std::array<double,2> myy_range{105e3,160e3}, myy_window{121e3,129e3};
-  factor = len(myy_window)/(len(myy_range)-len(myy_window));
-  double lumi_in = 0.;
+  double data_factor = len(myy_window)/(len(myy_range)-len(myy_window));
+  double lumi = 0., lumi_in = 0., mc_factor;
 
   std::vector<mxaod> mxaods;
   mxaods.reserve(argc-1);
@@ -274,12 +220,12 @@ int main(int argc, const char* argv[]) {
   }
   cout << "\n\033[36mTotal data lumi\033[0m: "
        << lumi_in << " ipb" << endl;
-  if (lumi!=0.) factor *= (lumi / lumi_in);
+  if (lumi!=0.) data_factor *= (lumi / lumi_in);
   else lumi = lumi_in;
   cout << "Scaling to " << lumi << " ipb" << endl << endl;
 
-  re_axes ra("hgam.bins");
   // Histogram definitions ==========================================
+  re_axes ra("hgam.bins");
 #define h_(name) re_hist<1> h_##name(#name,ra[#name]);
 
   hist<ivanp::index_axis<Int_t>>
@@ -298,6 +244,8 @@ int main(int argc, const char* argv[]) {
   h_(sumTau_yyj) h_(maxTau_yyj)
   h_(pT_yy_0j) h_(pT_yy_1j) h_(pT_yy_2j) h_(pT_yy_3j)
   h_(pT_j1_excl)
+
+  h_(xH) h_(x1) h_(x2)
 
   using hist2 = hist<
     ivanp::container_axis<std::vector<double>>,
@@ -322,14 +270,13 @@ int main(int argc, const char* argv[]) {
             name.substr(name.size()-18)!="_noDalitz_weighted") continue;
         TH1 *h = static_cast<TH1*>(key->ReadObj());
         cout << h->GetName() << endl;
-        n_all_inv = h->GetBinContent(3);
-        cout << h->GetXaxis()->GetBinLabel(3) << " = " << n_all_inv << endl;
-        n_all_inv = 1./n_all_inv;
+        const double n_all = h->GetBinContent(3);
+        cout << h->GetXaxis()->GetBinLabel(3) << " = " << n_all << endl;
+        mc_factor = lumi/n_all;
         break;
       }
     } else { // Data
-      hist_bin::weight = 1;
-      n_all_inv = 1;
+      hist_bin::weight = data_factor;
     }
 
     // read variables ===============================================
@@ -375,7 +322,7 @@ int main(int argc, const char* argv[]) {
       is_in_window = in(m_yy.det,myy_window);
 
       if (is_mc) { // signal from MC
-        hist_bin::weight = (**_weight)*(**_cs_br_fe);
+        hist_bin::weight = (**_weight) * (**_cs_br_fe) * mc_factor;
         is_fiducial = **_isFiducial && in(m_yy.truth,myy_range);
       } else { // background from data
         if (is_in_window) continue;
@@ -386,10 +333,10 @@ int main(int argc, const char* argv[]) {
       const auto nj = *_N_j;
       bool match_truth_nj;
 
-      const auto pT_yy = _pT_yy(d1e3);
+      const auto pT_yy = _pT_yy/1e3;
       const auto yAbs_yy = *_yAbs_yy;
-      const auto cosTS_yy = _cosTS_yy(_abs);
-      const auto Dy_y_y = _Dy_y_y(_abs);
+      const auto cosTS_yy = abs(_cosTS_yy);
+      const auto Dy_y_y = abs(_Dy_y_y);
 
       h_total(0);
 
@@ -398,13 +345,15 @@ int main(int argc, const char* argv[]) {
       fill(h_cosTS_yy, cosTS_yy);
 
       fill(h_Dy_y_y, Dy_y_y);
-      fill(h_pTt_yy, _pTt_yy(d1e3));
+      fill(h_pTt_yy, _pTt_yy/1e3);
       fill(h_cosTS_pT_yy, cosTS_yy, pT_yy);
 
       fill(h_N_j_excl, nj);
       fill_incl(h_N_j_incl, nj);
 
-      fill(h_HT, _HT(d1e3));
+      const auto HT = _HT/1e3;
+      fill(h_HT, HT);
+      fill(h_xH, pT_yy/HT);
 
       if (nj == 0) fill(h_pT_yy_0j, pT_yy, nj.truth==0);
 
@@ -412,16 +361,18 @@ int main(int argc, const char* argv[]) {
 
       match_truth_nj = nj.truth>=1;
 
-      const auto pT_j1 = _pT_j1(d1e3);
+      const auto pT_j1 = _pT_j1/1e3;
 
       fill(h_pT_j1, pT_j1, match_truth_nj);
 
       fill(h_yAbs_j1, *_yAbs_j1, match_truth_nj);
 
-      fill(h_sumTau_yyj, _sumTau_yyj(d1e3), match_truth_nj);
-      fill(h_maxTau_yyj, _maxTau_yyj(d1e3), match_truth_nj);
+      fill(h_sumTau_yyj, _sumTau_yyj/1e3, match_truth_nj);
+      fill(h_maxTau_yyj, _maxTau_yyj/1e3, match_truth_nj);
 
       fill(h_pT_yy_pT_j1, pT_yy, pT_j1, match_truth_nj);
+
+      fill(h_x1, pT_j1/HT);
 
       if (nj == 1) {
         match_truth_nj = nj.truth==1;
@@ -433,14 +384,15 @@ int main(int argc, const char* argv[]) {
 
       match_truth_nj = nj.truth>=2;
 
-      const auto dphi_jj = _Dphi_j_j(_abs);
-      const auto   dy_jj = _Dy_j_j(_abs);
-      const auto    m_jj = _m_jj(d1e3);
+      const auto pT_j2   = _pT_j2/1e3;
+      const auto dphi_jj = abs(_Dphi_j_j);
+      const auto   dy_jj = abs(_Dy_j_j);
+      const auto    m_jj = _m_jj/1e3;
 
-      fill(h_pT_j2, _pT_j2(d1e3), match_truth_nj);
+      fill(h_pT_j2, pT_j2, match_truth_nj);
       fill(h_yAbs_j2, *_yAbs_j2, match_truth_nj);
 
-      fill(h_Dphi_yy_jj, _Dphi_yy_jj([](auto x){ return M_PI - std::abs(x);}),
+      fill(h_Dphi_yy_jj, _Dphi_yy_jj%[](auto x){ return M_PI - std::abs(x);},
         match_truth_nj);
 
       fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed, match_truth_nj);
@@ -448,16 +400,18 @@ int main(int argc, const char* argv[]) {
       fill(h_Dy_j_j, dy_jj, match_truth_nj);
       fill(h_m_jj, m_jj, match_truth_nj);
 
-      fill(h_pT_yyjj, _pT_yyjj(d1e3), match_truth_nj);
+      fill(h_pT_yyjj, _pT_yyjj/1e3, match_truth_nj);
 
       fill(h_Dphi_Dy_jj, dphi_jj, dy_jj, match_truth_nj);
-      fill(h_Dphi_pi4_Dy_jj, dphi_jj(phi_pi4), dy_jj, match_truth_nj);
+      fill(h_Dphi_pi4_Dy_jj, dphi_jj%phi_pi4, dy_jj, match_truth_nj);
+
+      fill(h_x2, pT_j2/HT);
 
       if (nj == 2) fill(h_pT_yy_2j, pT_yy, nj.truth==2);
 
       // VBF --------------------------------------------------------
       var<double> pT_j3{0.,0.};
-      if (nj > 2) pT_j3 = _pT_j3(d1e3);
+      if (nj > 2) pT_j3 = _pT_j3/1e3;
 
       auto VBF1 = apply([](double m_jj, double dy_jj, double pT_j3) {
         return (m_jj > 600.) && (dy_jj > 4.0) && (pT_j3 < 30.);
@@ -481,13 +435,6 @@ int main(int argc, const char* argv[]) {
       fill(h_pT_yy_3j, pT_yy, match_truth_nj);
       fill(h_pT_j3, pT_j3, match_truth_nj);
     }
-
-    for (const auto& h : hist<ivanp::index_axis<Int_t>>::all)
-      for (auto& b : h->bins()) b.merge();
-    for (const auto& h : re_hist<1>::all)
-      for (auto& b : h->bins()) b.merge();
-    for (const auto& h : hist2::all)
-      for (auto& b : h->bins()) b.merge();
 
     file->Close();
   }

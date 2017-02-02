@@ -13,6 +13,9 @@ L_signif := $(ROOT_LIBS) -lTreePlayer
 C_mig := $(ROOT_CFLAGS)
 L_mig := $(ROOT_LIBS) -lTreePlayer
 
+C_hist := $(ROOT_CFLAGS)
+L_hist := $(ROOT_LIBS) -lTreePlayer
+
 SRC := src
 BIN := bin
 BLD := .build

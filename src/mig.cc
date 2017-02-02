@@ -26,42 +26,8 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
-template <typename T>
-struct var {
-  T det, truth;
-
-#define VAR_OP(OP) \
-  inline auto operator OP (const T& x) const noexcept(noexcept(det OP x)) \
-  -> var<decltype(det OP x)> { return { (det OP x), (truth OP x) }; }
-
-  VAR_OP(==)
-  VAR_OP(!=)
-  VAR_OP(<)
-  VAR_OP(<=)
-  VAR_OP(>)
-  VAR_OP(>=)
-  VAR_OP(/)
-  VAR_OP(*)
-
-  template <typename F>
-  inline auto operator()(F f) const noexcept(noexcept(f(std::declval<T>())))
-  -> var<decltype(f(std::declval<T>()))> { return { f(det), f(truth) }; }
-};
-
-template <typename T>
-struct var<TTreeReaderValue<T>> {
-  TTreeReaderValue<T> det, truth;
-  var(TTreeReader& tr, const std::string& name)
-  : det(tr,("HGamEventInfoAuxDyn."+name).c_str()),
-    truth(tr,("HGamTruthEventInfoAuxDyn."+name).c_str())
-  { }
-  using ret_type = std::conditional_t<
-    std::is_floating_point<T>::value, double, T>;
-  inline var<ret_type> operator*() { return { *det, *truth }; }
-  template <typename F>
-  inline auto operator()(F f) noexcept(noexcept(f(std::declval<T>())))
-  -> var<decltype(f(std::declval<T>()))> { return { f(*det), f(*truth) }; }
-};
+#define VAR_ALWAYS_MC
+#include "truth_reco_var.hh"
 
 // global variables =================================================
 double n_all_inv, lumi;
@@ -121,11 +87,9 @@ std::ostream& operator<<(std::ostream& o,
   return o;
 }
 
-inline double _abs(double x) noexcept { return std::abs(x); }
-
 int main(int argc, char* argv[]) {
   if (argc==1) {
-    cout << "usage: " << argv[0] << " mc*.root 36ifb" << endl;
+    cout << "usage: " << argv[0] << " mc*.root ?i[pf]b" << endl;
     return 1;
   }
   const std::array<double,2> myy_range{105e3,160e3};
@@ -247,7 +211,7 @@ int main(int argc, char* argv[]) {
       // FILL HISTOGRAMS ============================================
       const auto nj = *_N_j;
 
-      const auto pT_yy = *_pT_yy/1e3;
+      const auto pT_yy = _pT_yy/1e3;
       fill(h_pT_yy, pT_yy);
       fill(h_pT_yy_0j, pT_yy, nj==0);
       fill(h_pT_yy_1j, pT_yy, nj==1);
@@ -255,39 +219,39 @@ int main(int argc, char* argv[]) {
       fill(h_pT_yy_3j, pT_yy, nj>=3);
 
       fill(h_yAbs_yy, *_yAbs_yy);
-      fill(h_cosTS_yy, _cosTS_yy(_abs));
+      fill(h_cosTS_yy, abs(_cosTS_yy));
 
-      fill(h_Dy_y_y, _Dy_y_y(_abs));
-      fill(h_pTt_yy, *_pTt_yy/1e3);
+      fill(h_Dy_y_y, abs(_Dy_y_y));
+      fill(h_pTt_yy, _pTt_yy/1e3);
 
       fill(h_N_j_excl, nj);
 
-      fill(h_HT, *_HT/1e3);
+      fill(h_HT, _HT/1e3);
 
-      const auto pT_j1 = *_pT_j1/1e3;
+      const auto pT_j1 = _pT_j1/1e3;
       fill(h_pT_j1, pT_j1, nj>=1);
       fill(h_pT_j1_excl, pT_j1, nj==1);
       fill(h_yAbs_j1, *_yAbs_j1, nj>=1);
 
-      fill(h_pT_j2, *_pT_j2/1e3, nj>=2);
+      fill(h_pT_j2, _pT_j2/1e3, nj>=2);
       fill(h_yAbs_j2, *_yAbs_j2, nj>=2);
 
-      fill(h_pT_j3, *_pT_j3/1e3, nj>=3);
+      fill(h_pT_j3, _pT_j3/1e3, nj>=3);
 
-      fill(h_sumTau_yyj, *_sumTau_yyj/1e3, nj>=1);
-      fill(h_maxTau_yyj, *_maxTau_yyj/1e3, nj>=1);
+      fill(h_sumTau_yyj, _sumTau_yyj/1e3, nj>=1);
+      fill(h_maxTau_yyj, _maxTau_yyj/1e3, nj>=1);
 
-      fill(h_Dphi_j_j, _Dphi_j_j(_abs), nj>=2);
-      fill(h_Dy_j_j, _Dy_j_j(_abs), nj>=2);
+      fill(h_Dphi_j_j, abs(_Dphi_j_j), nj>=2);
+      fill(h_Dy_j_j, abs(_Dy_j_j), nj>=2);
 
-      fill(h_Dphi_yy_jj, _Dphi_yy_jj([](auto x){ return M_PI - std::abs(x);}),
+      fill(h_Dphi_yy_jj, _Dphi_yy_jj%[](auto x){ return M_PI - std::abs(x);},
            nj>=2);
 
       fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed, nj>=2);
-      fill(h_Dphi_j_j, _Dphi_j_j(_abs), nj>=2);
-      fill(h_m_jj, *_m_jj/1e3, nj>=2);
+      fill(h_Dphi_j_j, abs(_Dphi_j_j), nj>=2);
+      fill(h_m_jj, _m_jj/1e3, nj>=2);
 
-      fill(h_pT_yyjj, *_pT_yyjj/1e3, nj>=2);
+      fill(h_pT_yyjj, _pT_yyjj/1e3, nj>=2);
     }
 
     for (const auto& h : hist<Int_t>::all)
