@@ -16,6 +16,9 @@ L_mig := $(ROOT_LIBS) -lTreePlayer
 C_hist := $(ROOT_CFLAGS)
 L_hist := $(ROOT_LIBS) -lTreePlayer
 
+C_test_HT := $(ROOT_CFLAGS)
+L_test_HT := $(ROOT_LIBS) -lTreePlayer
+
 SRC := src
 BIN := bin
 BLD := .build
