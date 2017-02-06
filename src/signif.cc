@@ -153,12 +153,16 @@ int main(int argc, const char* argv[]) {
 
   std::vector<mxaod> mxaods;
   mxaods.reserve(argc-1);
+  const char* bins_file = nullptr;
+
   for (int a=1; a<argc; ++a) { // loop over arguments
     // validate args and parse names of input files
     static const std::regex data_re(
       "^(.*/)?data.*_(\\d*)ipb.*\\.root$", std::regex::optimize);
     static const std::regex mc_re(
       "^(.*/)?mc.*\\.root$", std::regex::optimize);
+    static const std::regex bins_re(
+      "^(.*/)?.*\\.bins$", std::regex::optimize);
     static const std::regex lumi_re(
       "([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?) *i([pf])b$",
       std::regex::optimize);
@@ -174,6 +178,9 @@ int main(int argc, const char* argv[]) {
     } else if (std::regex_search(arg,end,match,mc_re)) { // MC
       cout << "\033[36mMC\033[0m: " << arg << endl;
       mxaods.emplace_back(arg,true);
+    } else if (std::regex_search(arg,end,match,bins_re)) { // MC
+      cout << "\033[36mBinning\033[0m: " << arg << endl;
+      bins_file = arg;
     } else if (std::regex_search(arg,end,match,lumi_re)) {
       lumi = std::stod(match[1]);
       if (arg[match.position(3)]=='f') lumi *= 1e3; // femto to pico
@@ -182,6 +189,14 @@ int main(int argc, const char* argv[]) {
       return 1;
     }
   }
+  if (!bins_file) {
+    cerr << "Must specify a .bins file" << endl;
+    return 1;
+  }
+  if (!mxaods.size()) {
+    cerr << "Must specify at least 1 .root file" << endl;
+    return 1;
+  }
   cout << "\n\033[36mTotal data lumi\033[0m: "
        << lumi_in << " ipb" << endl;
   if (lumi!=0.) data_factor *= (lumi / lumi_in);
@@ -189,7 +204,7 @@ int main(int argc, const char* argv[]) {
   cout << "Scaling to " << lumi << " ipb" << endl << endl;
 
   // Histogram definitions ==========================================
-  re_axes ra("hgam.bins");
+  re_axes ra(bins_file);
 #define h_(name) re_hist<1> h_##name(#name,ra[#name]);
 
   hist<ivanp::index_axis<Int_t>>
@@ -199,7 +214,7 @@ int main(int argc, const char* argv[]) {
     h_VBF("VBF",{1,4});
 
   h_(pT_yy) h_(yAbs_yy) h_(cosTS_yy) h_(pTt_yy) h_(Dy_y_y)
-  h_(HT)
+  h_(HT) h_(HT_yy)
   h_(pT_j1) h_(pT_j2) h_(pT_j3)
   h_(yAbs_j1) h_(yAbs_j2)
   h_(Dphi_j_j) h_(Dphi_j_j_signed)
@@ -317,6 +332,7 @@ int main(int argc, const char* argv[]) {
 
       const auto HT = _HT/1e3;
       fill(h_HT, HT);
+      fill(h_HT_yy, HT+pT_yy);
       fill(h_xH, pT_yy/HT);
 
       if (nj == 0) fill(h_pT_yy_0j, pT_yy, nj.truth==0);
