@@ -19,6 +19,15 @@ L_hist := $(ROOT_LIBS) -lTreePlayer
 C_test_HT := $(ROOT_CFLAGS)
 L_test_HT := $(ROOT_LIBS) -lTreePlayer
 
+C_superfine := $(ROOT_CFLAGS)
+L_superfine := $(ROOT_LIBS) -lTreePlayer
+
+C_optimize := $(ROOT_CFLAGS)
+L_optimize := $(ROOT_LIBS) -lTreePlayer
+
+C_simple_signif := $(ROOT_CFLAGS)
+L_simple_signif := $(ROOT_LIBS) -lTreePlayer
+
 SRC := src
 BIN := bin
 BLD := .build
@@ -39,7 +48,9 @@ ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
 -include $(DEPS)
 endif
 
-$(BIN)/test $(BIN)/signif $(BIN)/mig: $(BLD)/re_axes.o
+$(BIN)/test $(BIN)/signif $(BIN)/mig \
+$(BIN)/superfine $(BIN)/optimize \
+$(BIN)/simple_signif: $(BLD)/re_axes.o
 
 $(DEPS): $(BLD)/%.d: $(SRC)/%.cc | $(BLD)
 	$(CXX) $(DF) -MM -MT '$(@:.d=.o)' $< -MF $@

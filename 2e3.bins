@@ -1,0 +1,18 @@
+(yAbs|Dy)_.+ { 2e3: 0 9 }
+cos.+ { 2e3: 0 1 }
+
+pT_.+ { 2e3: 0 2e3 }
+
+pTt_yy { 2e3: 0 1500 }
+
+HT { 2e3: 30 4e3 }
+HT_yy { 2e3: 0 4e3 }
+
+Dphi_.+_signed { 2e3: -3.1415926 3.1415926 }
+Dphi_.+ { 2e3: 0 3.14159 }
+m_jj { 2e3: 0 3e3 }
+
+sumTau_yyj { 2e3: 0 1e3 }
+maxTau_yyj { 2e3: 8 1e3 }
+
+x.+ { 2e3: 0 1 }
