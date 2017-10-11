@@ -36,18 +36,20 @@ if len(dups)!=0:
 # add sheet
 # https://developers.google.com/sheets/api/samples/sheet#add_a_sheet
 print "Adding sheet: ", title
-result = api.batchUpdate(spreadsheetId=ID, body = \
-{ 'requests': [
+result = api.batchUpdate(spreadsheetId=ID, body = { 'requests': [
   { 'addSheet': {
       'properties': {
         'title': title,
         'gridProperties': { 'rowCount': 1000, 'columnCount': 11 }
+        # 'defaultFormat': {
+        #   'padding': { 'top': 1, 'right': 1, 'bottom': 1, 'left': 1 }
+        # }
       }
     }
-  }]
-}).execute()
+  }
+]}).execute()
 
-# print result
+print result
 sheetId = result['replies'][0]['addSheet']['properties']['sheetId']
 
 # header
@@ -58,30 +60,50 @@ api.values().update(spreadsheetId=ID, range=title+'!A1', body = \
 ]}, valueInputOption='RAW').execute()
 
 # conditional formatting
-def val_fmt(ranges,colors):
-  api.batchUpdate(spreadsheetId=ID, body = \
-  { 'requests': [
-    { 'addConditionalFormatRule': {
-        'rule': { 'ranges': ranges, 'booleanRule': {
-          'condition': {
-            'type': 'NUMBER_LESS', 'values': [ { 'userEnteredValue': x[1][0] } ]
-          },
-          'format': {
-            'textFormat': {
-              'bold': True, 'foregroundColor': x[1][1]
+def cond_fmt(ranges,colors):
+    return [ {
+      'addConditionalFormatRule': {
+        'rule': {
+          'ranges': ranges,
+          'booleanRule': {
+            'condition': {
+              'type': 'NUMBER_LESS',
+              'values': [ { 'userEnteredValue': x[1][0] } ]
+            },
+            'format': {
+              'textFormat': { 'bold': True, 'foregroundColor': x[1][1] }
             }
           }
-        } }, 'index': x[0]
+        }, 'index': x[0]
       }
-    } for x in enumerate(colors)
-  ]}).execute()
+    } for x in enumerate(colors) ]
 
-val_fmt(
+api.batchUpdate(spreadsheetId=ID, body = { 'requests': [
+    { 'updateSheetProperties': {
+        'properties': {
+          'sheetId': sheetId,
+          'gridProperties': { 'frozenRowCount': 2 }
+        },
+        'fields': 'gridProperties.frozenRowCount'
+    } }
+  ] + \
+  cond_fmt(
+    { 'sheetId': sheetId,
+      'startRowIndex': 2, 'startColumnIndex': 8, 'endColumnIndex': 9 },
+    [ ('1'  , { 'red': 204./255 }),
+      ('2'  , { 'red': 255./255, 'green': 102./255 }),
+      ('2.3', { 'blue': 153./255 }),
+      ('100', { 'green': 102./255 })
+    ]
+  ) + \
+  cond_fmt(
     { 'sheetId': sheetId,
       'startRowIndex': 2, 'startColumnIndex': 10, 'endColumnIndex': 11 },
     [ ('0.4' , { 'red': 204./255 }),
       ('0.5' , { 'red': 255./255, 'green': 102./255 }),
       ('0.75', { 'blue': 153./255 }),
       ('1'   , { 'green': 102./255 })
-    ])
+    ]
+  )
+}).execute()
 
