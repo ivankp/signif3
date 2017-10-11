@@ -47,7 +47,7 @@ result = api.batchUpdate(spreadsheetId=ID, body = \
   }]
 }).execute()
 
-print result
+# print result
 sheetId = result['replies'][0]['addSheet']['properties']['sheetId']
 
 # header
@@ -58,64 +58,30 @@ api.values().update(spreadsheetId=ID, range=title+'!A1', body = \
 ]}, valueInputOption='RAW').execute()
 
 # conditional formatting
-def cfmt(rule_t,ranges,rule,i=0):
-    return { 'addConditionalFormatRule': {
-        'rule': { 'ranges': ranges, rule_t : rule }, 'index': i
-      } }
+def val_fmt(ranges,colors):
+  api.batchUpdate(spreadsheetId=ID, body = \
+  { 'requests': [
+    { 'addConditionalFormatRule': {
+        'rule': { 'ranges': ranges, 'booleanRule': {
+          'condition': {
+            'type': 'NUMBER_LESS', 'values': [ { 'userEnteredValue': x[1][0] } ]
+          },
+          'format': {
+            'textFormat': {
+              'bold': True, 'foregroundColor': x[1][1]
+            }
+          }
+        } }, 'index': x[0]
+      }
+    } for x in enumerate(colors)
+  ]}).execute()
 
-ranges = [
-  { 'sheetId': sheetId,
-    'startRowIndex': 2, 'startColumnIndex': 10, 'endColumnIndex': 11 }
-]
-api.batchUpdate(spreadsheetId=ID, body = \
-{ 'requests': [
-  cfmt('booleanRule',ranges,{
-    'condition': {
-      'type': 'NUMBER_LESS', 'values': [ { 'userEnteredValue': '0.4' } ]
-    },
-    'format': {
-      'textFormat': {
-        'bold': True, 'foregroundColor': { 'red': 204./255 }
-      }
-    }
-  },0),
-  cfmt('booleanRule',ranges,{
-    'condition': {
-      'type': 'NUMBER_LESS', 'values': [ { 'userEnteredValue': '0.5' } ]
-    },
-    'format': {
-      'textFormat': {
-        'bold': True, 'foregroundColor': { 'red': 255./255, 'green': 102./255 }
-      }
-    }
-  },1),
-  cfmt('booleanRule',ranges,{
-    'condition': {
-      'type': 'NUMBER_LESS', 'values': [ { 'userEnteredValue': '0.75' } ]
-    },
-    'format': {
-      'textFormat': {
-        'bold': True, 'foregroundColor': { 'blue': 153./255 }
-      }
-    }
-  },2),
-  cfmt('booleanRule',ranges,{
-    'condition': {
-      'type': 'NUMBER_GREATER_THAN_EQ', 'values': [ { 'userEnteredValue': '0.75' } ]
-    },
-    'format': {
-      'textFormat': {
-        'bold': True, 'foregroundColor': { 'green': 102./255 }
-      }
-    }
-  },3)
-]}).execute()
-# 'gradientRule': {
-#   'minpoint': { 'color': { 'red': float.fromhex('0x0.CC') },
-#                 'type': 'NUMBER', 'value': '0' },
-#   'midpoint': { 'color': { 'blue': float.fromhex('0x0.99') },
-#                 'type': 'NUMBER', 'value': '0.7' },
-#   'maxpoint': { 'color': { 'green': float.fromhex('0x0.66') },
-#                 'type': 'NUMBER', 'value': '1' }
-# }
+val_fmt(
+    { 'sheetId': sheetId,
+      'startRowIndex': 2, 'startColumnIndex': 10, 'endColumnIndex': 11 },
+    [ ('0.4' , { 'red': 204./255 }),
+      ('0.5' , { 'red': 255./255, 'green': 102./255 }),
+      ('0.75', { 'blue': 153./255 }),
+      ('1'   , { 'green': 102./255 })
+    ])
 
