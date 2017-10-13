@@ -49,13 +49,6 @@ result = api.batchUpdate(spreadsheetId=ID, body = { 'requests': [
 sheetId = result['replies'][0]['addSheet']['properties']['sheetId']
 print 'sheetId:', sheetId
 
-# header
-api.values().update(spreadsheetId=ID, range=title+'!A1', body = \
-{ 'values': [
-['','','','','','unc','','unc','signif','','reco'],
-['Variable','[',')','width','sig','√(Σ s²)','bkg','√(Σ b²)','s/√(s+b)','s/(s+b)','purity']
-]}, valueInputOption='RAW').execute()
-
 def col(i):
   return { 'sheetId': sheetId, 'startRowIndex': 2,
            'startColumnIndex': i, 'endColumnIndex': i+1 }
@@ -77,6 +70,11 @@ def cond_color(ranges,colors):
       }
     } for x in enumerate(colors) ]
 
+def color(c):
+  c1 = divmod(c,256)
+  c2 = divmod(c1[0],256)
+  return { 'red': c2[0]/255., 'green': c2[1]/255., 'blue': c1[1]/255. }
+
 def fmt(ranges,fields):
   return [ {
     'repeatCell': {
@@ -97,7 +95,14 @@ def width(w,a,b):
 
 # https://developers.google.com/sheets/api/samples/formatting
 api.batchUpdate(spreadsheetId=ID, body = { 'requests':
-  [ width(52,1,11),
+  [ { 'updateSheetProperties': {
+        'properties': {
+          'sheetId': sheetId,
+          'gridProperties': { 'frozenRowCount': 2 }
+        },
+        'fields': 'gridProperties.frozenRowCount'
+    } },
+    width(52,1,11),
     { "updateDimensionProperties": {
         "range": { "sheetId": sheetId, "dimension": "ROWS" },
         "properties": { "pixelSize": 17 }, "fields": "pixelSize"
@@ -109,28 +114,22 @@ api.batchUpdate(spreadsheetId=ID, body = { 'requests':
           'startRowIndex': 0, 'endRowIndex': 2,
           'startColumnIndex': 0, 'endColumnIndex': 11 } ],
         { 'horizontalAlignment' : 'CENTER' }) + \
+  fmt([ col(3), col(5), col(7) ],
+        { 'textFormat': { 'foregroundColor': color(0x434343) } }) + \
   fmt([ col(8), col(10) ],
         { 'textFormat': { 'bold': True } }) + \
-  [ { 'updateSheetProperties': {
-        'properties': {
-          'sheetId': sheetId,
-          'gridProperties': { 'frozenRowCount': 2 }
-        },
-        'fields': 'gridProperties.frozenRowCount'
-    } }
-  ] + \
   cond_color( col(8),
-    [ ('1'  , { 'red': 204./255 }),
-      ('2'  , { 'red': 255./255, 'green': 102./255 }),
-      ('2.3', { 'blue': 153./255 }),
-      ('100', { 'green': 102./255 })
+    [ ('1'  , color(0xCC0000)),
+      ('2'  , color(0xFF6600)),
+      ('2.3', color(0x000099)),
+      ('100', color(0x006600))
     ]
   ) + \
   cond_color( col(10),
-    [ ('0.4' , { 'red': 204./255 }),
-      ('0.5' , { 'red': 255./255, 'green': 102./255 }),
-      ('0.75', { 'blue': 153./255 }),
-      ('1'   , { 'green': 102./255 })
+    [ ('0.4' , color(0xCC0000)),
+      ('0.5' , color(0xFF6600)),
+      ('0.75', color(0x000099)),
+      ('1'   , color(0x006600))
     ]
   ) + \
   [ { 'addConditionalFormatRule': {
@@ -148,4 +147,11 @@ api.batchUpdate(spreadsheetId=ID, body = { 'requests':
       }
   } ]
 }).execute()
+
+# header
+api.values().update(spreadsheetId=ID, range=title+'!A1', body = \
+{ 'values': [
+['','','','','','unc','','unc','signif','','reco'],
+['Variable','[',')','width','sig','√(Σ s²)','bkg','√(Σ b²)','s/√(s+b)','s/(s+b)','purity']
+]}, valueInputOption='RAW').execute()
 
