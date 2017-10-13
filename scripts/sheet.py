@@ -61,7 +61,7 @@ def col(i):
            'startColumnIndex': i, 'endColumnIndex': i+1 }
 
 # conditional formatting
-def cond_fmt(ranges,colors):
+def cond_color(ranges,colors):
     return [ {
       'addConditionalFormatRule': {
         'rule': {
@@ -109,7 +109,7 @@ api.batchUpdate(spreadsheetId=ID, body = { 'requests':
           'startRowIndex': 0, 'endRowIndex': 2,
           'startColumnIndex': 0, 'endColumnIndex': 11 } ],
         { 'horizontalAlignment' : 'CENTER' }) + \
-  fmt([ col(0), col(8), col(10) ],
+  fmt([ col(8), col(10) ],
         { 'textFormat': { 'bold': True } }) + \
   [ { 'updateSheetProperties': {
         'properties': {
@@ -119,19 +119,33 @@ api.batchUpdate(spreadsheetId=ID, body = { 'requests':
         'fields': 'gridProperties.frozenRowCount'
     } }
   ] + \
-  cond_fmt( col(8),
+  cond_color( col(8),
     [ ('1'  , { 'red': 204./255 }),
       ('2'  , { 'red': 255./255, 'green': 102./255 }),
       ('2.3', { 'blue': 153./255 }),
       ('100', { 'green': 102./255 })
     ]
   ) + \
-  cond_fmt( col(10),
+  cond_color( col(10),
     [ ('0.4' , { 'red': 204./255 }),
       ('0.5' , { 'red': 255./255, 'green': 102./255 }),
       ('0.75', { 'blue': 153./255 }),
       ('1'   , { 'green': 102./255 })
     ]
-  )
+  ) + \
+  [ { 'addConditionalFormatRule': {
+        'rule': {
+          'ranges': col(0),
+          'booleanRule': {
+            'condition': {
+              'type': 'CUSTOM_FORMULA',
+              'values': [ { 'userEnteredValue':
+                '=OR(ROW()=3,AND(ISBLANK(A2),ISBLANK(B2)))' } ]
+            },
+            'format': { 'textFormat': { 'bold': True } }
+          }
+        }, 'index': 0
+      }
+  } ]
 }).execute()
 
