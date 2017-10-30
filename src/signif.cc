@@ -9,8 +9,10 @@
 #include <TFile.h>
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
+#include <TTreeReaderArray.h>
 #include <TH1.h>
 #include <TKey.h>
+#include <TLorentzVector.h>
 
 #include "binner.hh"
 #include "re_axes.hh"
@@ -20,7 +22,7 @@
 #include "exception.hh"
 #include "prtbins.hh"
 
-#define test(var) \
+#define TEST(var) \
   std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
 
 using std::cout;
@@ -134,22 +136,31 @@ void fill(hist<A1,A2>& h, const var<T1>& x1, const var<T2>& x2,
   } else h.fill_bin(bin_det);
 }
 
-// functions applied to variables
-inline double phi_pi4(double phi) noexcept {
-  phi += M_PI_4;
-  return (phi <= M_PI ? phi : phi - M_PI);
-}
-
 template <typename F, typename... T>
 auto apply(F f, const var<T>&... vars) -> var<decltype(f(vars.det...))> {
   if (is_mc) return { f(vars.det...), f(vars.truth...) };
   else return { f(vars.det...), { } };
 }
 
+// functions applied to variables
+inline double phi_pi4(double phi) noexcept {
+  phi += M_PI_4;
+  return (phi <= M_PI ? phi : phi - M_PI);
+}
+
+TLorentzVector PxPyPzE(const std::array<double,4>& p) noexcept {
+  return { p[0]*1e-3, p[1]*1e-3, p[2]*1e-3, p[3]*1e-3 };
+};
+TLorentzVector PtEtaPhiM(const std::array<double,4>& p) noexcept {
+  TLorentzVector p4;
+  p4.SetPtEtaPhiM( p[0]*1e-3, p[1], p[2], p[3]*1e-3 );
+  return p4;
+};
+
 int main(int argc, const char* argv[]) {
   const std::array<double,2> myy_range{105e3,160e3}, myy_window{121e3,129e3};
   double data_factor = len(myy_window)/(len(myy_range)-len(myy_window));
-  double lumi = 0., lumi_in = 0., mc_factor;
+  double lumi = 0., lumi_in = 0., mc_factor = 1.;
 
   std::vector<mxaod> mxaods;
   mxaods.reserve(argc-1);
@@ -226,6 +237,8 @@ int main(int argc, const char* argv[]) {
 
   h_(xH) h_(x1) h_(x2)
 
+  h_(m_yyj)
+
   using hist2 = hist<
     ivanp::container_axis<std::vector<double>>,
     ivanp::container_axis<std::vector<double>> >;
@@ -287,7 +300,17 @@ int main(int argc, const char* argv[]) {
     VAR30_(sumTau_yyj) VAR30_(maxTau_yyj)
     VAR30_(pT_yyjj)    VAR30_(Dphi_yy_jj)
 
-    // loop over events =============================================
+    // Get 4-momenta for photons and jets
+    var<std::array<TTreeReaderArray<float>,4>>
+    _photons( reader,
+      {"HGamPhotonsAuxDyn.","HGamTruthPhotonsAuxDyn."},
+      {"pt","eta","phi","m"}, {"px","py","pz","e"} ),
+    _jets( reader,
+      {"HGamAntiKt4EMTopoJetsAuxDyn.","HGamAntiKt4TruthJetsAuxDyn."},
+      {"pt","eta","phi","m"} );
+
+    // LOOP over events =============================================
+    // reader.SetEntry(365022);
     using tc = ivanp::timed_counter<Long64_t>;
     for (tc ent(reader.GetEntries(true)); reader.Next(); ++ent) {
 
@@ -312,10 +335,10 @@ int main(int argc, const char* argv[]) {
       const auto nj = *_N_j;
       bool match_truth_nj;
 
-      const auto pT_yy = _pT_yy/1e3;
+      const auto pT_yy = _pT_yy*1e-3;
       const auto yAbs_yy = *_yAbs_yy;
-      const auto cosTS_yy = abs(_cosTS_yy);
-      const auto Dy_y_y = abs(_Dy_y_y);
+      const auto cosTS_yy = abs(*_cosTS_yy);
+      const auto Dy_y_y = abs(*_Dy_y_y);
 
       h_total(0);
 
@@ -324,13 +347,13 @@ int main(int argc, const char* argv[]) {
       fill(h_cosTS_yy, cosTS_yy);
 
       fill(h_Dy_y_y, Dy_y_y);
-      fill(h_pTt_yy, _pTt_yy/1e3);
+      fill(h_pTt_yy, _pTt_yy*1e-3);
       fill(h_cosTS_pT_yy, cosTS_yy, pT_yy);
 
       fill(h_N_j_excl, nj);
       fill_incl(h_N_j_incl, nj);
 
-      const auto HT = _HT/1e3;
+      const auto HT = _HT*1e-3;
       fill(h_HT, HT);
       fill(h_HT_yy, HT+pT_yy);
       fill(h_xH, pT_yy/HT);
@@ -341,14 +364,14 @@ int main(int argc, const char* argv[]) {
 
       match_truth_nj = nj.truth>=1;
 
-      const auto pT_j1 = _pT_j1/1e3;
+      const auto pT_j1 = _pT_j1*1e-3;
 
       fill(h_pT_j1, pT_j1, match_truth_nj);
 
       fill(h_yAbs_j1, *_yAbs_j1, match_truth_nj);
 
-      fill(h_sumTau_yyj, _sumTau_yyj/1e3, match_truth_nj);
-      fill(h_maxTau_yyj, _maxTau_yyj/1e3, match_truth_nj);
+      fill(h_sumTau_yyj, _sumTau_yyj*1e-3, match_truth_nj);
+      fill(h_maxTau_yyj, _maxTau_yyj*1e-3, match_truth_nj);
 
       fill(h_pT_yy_pT_j1, pT_yy, pT_j1, match_truth_nj);
 
@@ -360,19 +383,44 @@ int main(int argc, const char* argv[]) {
         fill(h_pT_yy_1j, pT_yy, match_truth_nj);
       }
 
+      // try {
+        auto yyj  = (_jets   [0] | PtEtaPhiM);
+             yyj += (_photons[0] | std::make_pair(PtEtaPhiM,PxPyPzE));
+             yyj += (_photons[1] | std::make_pair(PtEtaPhiM,PxPyPzE));
+
+        fill(h_m_yyj, yyj|[](auto& x){ return x.M(); }, match_truth_nj);
+
+      // } catch (const std::exception& e) {
+      //   cerr << "\033[31m" << reader.GetCurrentEntry() << "\033[0m: "
+      //        << e.what() << endl;
+      // }
+
+      // if (std::abs(std::log10(jet1.Pt()/pT_j1.det))>1e-10) {
+      //   TEST( jet1.Pt() )
+      //   TEST( pT_j1.det )
+      //   for (auto pt : jet_pt) TEST(pt);
+      //   if (++cnt == 10) return 1;
+      // }
+      // if (std::abs(std::log10(higgs.Pt()/pT_yy.det))>1e-7) {
+      //   TEST( std::abs(std::log10(higgs.Pt()/pT_yy.det)) )
+      //   TEST( higgs.Pt() )
+      //   TEST( pT_yy.det )
+      //   if (++cnt == 10) return 1;
+      // }
+
       if (nj < 2) continue; // 2 jets -------------------------------
 
       match_truth_nj = nj.truth>=2;
 
-      const auto pT_j2   = _pT_j2/1e3;
-      const auto dphi_jj = abs(_Dphi_j_j);
-      const auto   dy_jj = abs(_Dy_j_j);
-      const auto    m_jj = _m_jj/1e3;
+      const auto pT_j2   = _pT_j2*1e-3;
+      const auto dphi_jj = abs(*_Dphi_j_j);
+      const auto   dy_jj = abs(*_Dy_j_j);
+      const auto    m_jj = _m_jj*1e-3;
 
       fill(h_pT_j2, pT_j2, match_truth_nj);
       fill(h_yAbs_j2, *_yAbs_j2, match_truth_nj);
 
-      fill(h_Dphi_yy_jj, _Dphi_yy_jj%[](auto x){ return M_PI - std::abs(x);},
+      fill(h_Dphi_yy_jj, _Dphi_yy_jj|[](auto x){ return M_PI - std::abs(x);},
         match_truth_nj);
 
       fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed, match_truth_nj);
@@ -380,10 +428,10 @@ int main(int argc, const char* argv[]) {
       fill(h_Dy_j_j, dy_jj, match_truth_nj);
       fill(h_m_jj, m_jj, match_truth_nj);
 
-      fill(h_pT_yyjj, _pT_yyjj/1e3, match_truth_nj);
+      fill(h_pT_yyjj, _pT_yyjj*1e-3, match_truth_nj);
 
       fill(h_Dphi_Dy_jj, dphi_jj, dy_jj, match_truth_nj);
-      fill(h_Dphi_pi4_Dy_jj, dphi_jj%phi_pi4, dy_jj, match_truth_nj);
+      fill(h_Dphi_pi4_Dy_jj, dphi_jj|phi_pi4, dy_jj, match_truth_nj);
 
       fill(h_x2, pT_j2/HT);
 
@@ -391,7 +439,7 @@ int main(int argc, const char* argv[]) {
 
       // VBF --------------------------------------------------------
       var<double> pT_j3{0.,0.};
-      if (nj > 2) pT_j3 = _pT_j3/1e3;
+      if (nj > 2) pT_j3 = _pT_j3*1e-3;
 
       auto VBF1 = apply([](double m_jj, double dy_jj, double pT_j3) {
         return (m_jj > 600.) && (dy_jj > 4.0) && (pT_j3 < 30.);

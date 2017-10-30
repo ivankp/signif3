@@ -244,7 +244,7 @@ int main(int argc, char* argv[]) {
       fill(h_Dphi_j_j, abs(_Dphi_j_j), nj>=2);
       fill(h_Dy_j_j, abs(_Dy_j_j), nj>=2);
 
-      fill(h_Dphi_yy_jj, _Dphi_yy_jj%[](auto x){ return M_PI - std::abs(x);},
+      fill(h_Dphi_yy_jj, _Dphi_yy_jj|[](auto x){ return M_PI - std::abs(x);},
            nj>=2);
 
       fill(h_Dphi_j_j_signed, *_Dphi_j_j_signed, nj>=2);

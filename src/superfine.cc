@@ -75,7 +75,7 @@ inline double phi_pi4(double phi) noexcept {
 int main(int argc, const char* argv[]) {
   const std::array<double,2> myy_range{105e3,160e3}, myy_window{121e3,129e3};
   double data_factor = len(myy_window)/(len(myy_range)-len(myy_window));
-  double lumi = 0., lumi_in = 0., mc_factor;
+  double lumi = 0., lumi_in = 0., mc_factor = 1.;
 
   std::vector<mxaod> mxaods;
   mxaods.reserve(argc-1);

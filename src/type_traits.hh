@@ -2,31 +2,11 @@
 #define IVANP_TYPE_TRAITS_HH
 
 #include <type_traits>
+#include "meta.hh"
 
 namespace ivanp {
 
-// ******************************************************************
-
-template <typename... T> struct make_void { typedef void type; };
-template <typename... T> using void_t = typename make_void<T...>::type;
-
 template <typename New, typename Old> using replace_t = New;
-
-// Operations on traits *********************************************
-
-template<class...> struct conjunction: std::true_type { };
-template<class B1> struct conjunction<B1>
-: std::integral_constant<bool,bool(B1::value)> { };
-template<class B1, class... Bn> struct conjunction<B1, Bn...> 
-: std::conditional_t<bool(B1::value),
-  conjunction<Bn...>, conjunction<B1> > {};
-
-template<class...> struct disjunction: std::false_type { };
-template<class B1> struct disjunction<B1>
-: std::integral_constant<bool,bool(B1::value)> { };
-template<class B1, class... Bn> struct disjunction<B1, Bn...> 
-: std::conditional_t<bool(B1::value),
-  disjunction<B1>, disjunction<Bn...>>  { };
 
 // ******************************************************************
 

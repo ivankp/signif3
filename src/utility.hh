@@ -24,10 +24,10 @@ struct named_ptr {
 
 #ifdef _GLIBCXX_VECTOR
 template <typename T>
-auto reserve(size_t n) {
-  std::vector<T> _v;
-  _v.reserve(n);
-  return _v;
+inline auto reserve(size_t n) {
+  std::vector<T> v;
+  v.reserve(n);
+  return v;
 }
 #endif
 
@@ -48,7 +48,7 @@ auto subtuple(const std::tuple<T...>& t, std::index_sequence<I...>) {
 
 template <typename F, typename... T, size_t... I>
 inline decltype(auto)
-call(F f, const std::tuple<T...>& t, std::index_sequence<I...>) {
+call(F&& f, const std::tuple<T...>& t, std::index_sequence<I...>) {
   static_assert(sizeof...(I) <= sizeof...(T),"");
   return f( std::get<I>(t)... );
 }

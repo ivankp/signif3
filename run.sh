@@ -2,7 +2,7 @@
 
 MxAOD=/eos/atlas/atlascerngroupdisk/phys-higgs/HSG1/MxAOD/h015d
 
-./bin/signif signif23.bins \
+./bin/signif ${1-signif.bins} \
   $(find ${MxAOD}/data{15,16} -maxdepth 1 -type f -name '*.root') \
   ${MxAOD}/mc15c/mc15c.PowhegPy8_NNLOPS_ggH125.MxAODDetailed.p3015.h015d.root \
   ${MxAOD}/mc15c/mc15c.PowhegPy8_NNPDF30_VBFH125.MxAODDetailed.p3015.h015d.root \

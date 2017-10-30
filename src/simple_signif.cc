@@ -29,8 +29,7 @@ int main(int argc, const char* argv[]) {
   const std::array<double,2> myy_range{105e3,160e3}, myy_window{121e3,129e3};
 
   const double data_factor = len(myy_window)/(len(myy_range)-len(myy_window));
-  double mc_factor;
-  double lumi;
+  double mc_factor = 1., lumi = 1.;
 
   std::vector<std::pair<std::unique_ptr<TFile>,bool>> mxaods;
   mxaods.reserve(argc-1);

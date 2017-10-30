@@ -1,9 +1,9 @@
 CXX := g++
 STD := -std=c++14
 CPPFLAGS := $(STD) -Isrc
-CXXFLAGS := $(STD) -Wall -O3 -Isrc -fmax-errors=3
+CXXFLAGS := $(STD) -Wall -O3 -flto -Isrc -fmax-errors=3
 # CXXFLAGS := $(STD) -Wall -g -Iinclude -fmax-errors=3
-LDFLAGS := $(STD) -O3
+LDFLAGS := $(STD) -O3 -flto
 LDLIBS :=
 
 SRC := src
@@ -17,7 +17,7 @@ ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean)))
 
 LDFLAGS += $(shell sed -r 's/([^:]+)(:|$$)/ -L\1/g' <<< "$$LIBRARY_PATH")
 
-ROOT_CXXFLAGS := $(shell root-config --cflags)
+ROOT_CXXFLAGS := $(shell root-config --cflags | sed 's/ -std=c++[^ ]\+ / /')
 ROOT_LDFLAGS  := $(shell root-config --ldflags)
 ROOT_LDLIBS   := $(shell root-config --libs)
 
